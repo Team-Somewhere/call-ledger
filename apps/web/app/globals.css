@@ -1,50 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
-  --background: #ffffff;
+  --background: #fffaf3;
   --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
+  --card: #fff2db;
+  --border: #e8dfd1;
+  --accent: #f62440;
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
+  background-color: var(--background);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
+/* Subtle editorial paper grain / grid */
+.ledger-dot-grid {
+  background-image: radial-gradient(#e5dbcb 1px, transparent 1px);
+  background-size: 16px 16px;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+/* Halftone dither banner effect */
+.halftone-banner {
+  background: repeating-linear-gradient(
+    45deg,
+    #171717,
+    #171717 2px,
+    #262626 2px,
+    #262626 4px
+  );
 }
 
-.imgDark {
-  display: none;
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
 }
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-
-  .imgLight {
-    display: none;
-  }
-  .imgDark {
-    display: unset;
-  }
+::-webkit-scrollbar-track {
+  background: #fffaf3;
+}
+::-webkit-scrollbar-thumb {
+  background: #e8dfd1;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d8cbba;
 }
