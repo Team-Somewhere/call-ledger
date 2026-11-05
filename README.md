@@ -1,159 +1,138 @@
-# Turborepo starter
+# CallLedger — Social Crypto Trading & Creator Reputation Platform
 
-This Turborepo starter is maintained by the Turborepo core team.
+CallLedger is a social crypto trading platform that allows users to discover crypto traders on X, inspect on-chain verifiable performance records, and execute copy-trading strategies.
 
-## Using this example
+## Monorepo Architecture
 
-Run the following command:
+This repository is organized as a Turborepo monorepo powered by npm workspaces.
 
-```sh
-npx create-turbo@latest
+```text
+call-ledger/
+│
+├── apps/
+│   ├── web/                     # Next.js 16 App Router frontend (Tailwind CSS, dark theme)
+│   ├── api/                     # Express 5 REST backend (PostgreSQL, Drizzle ORM, Zod)
+│   └── worker/                  # Background worker (scheduled jobs, heartbeat, ingestion)
+│
+├── packages/
+│   ├── database/                # PostgreSQL schema (Drizzle ORM), connection pool, migrations
+│   ├── shared/                  # Isomorphic TypeScript types, constants, and Zod validation schemas
+│   ├── arkiv/                   # Architectural interfaces & documentation for on-chain attestations
+│   ├── definitive/              # Architectural interfaces & documentation for Definitive Flash execution
+│   ├── strategy-engine/         # Architectural interfaces & validator for copy-trading rules
+│   ├── typescript-config/       # Shared tsconfig bases (base, nextjs, node)
+│   ├── eslint-config/           # Shared ESLint configuration
+│   └── ui/                      # Shared UI components
+│
+├── .env.example                 # Environment variables specification
+├── package.json                 # Monorepo root configuration & scripts
+└── turbo.json                   # Turborepo task orchestration pipeline
 ```
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
+## Getting Started
 
-### Apps and Packages
+### Prerequisites
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+- Node.js `>=24` (Recommended: v25+)
+- npm `>=11.9.0`
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+### 1. Installation
 
-### Utilities
+Install all dependencies across workspaces with a single command:
 
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```bash
+npm install
 ```
 
-Without global `turbo`, use your package manager:
+### 2. Configure Environment
 
-```sh
-cd my-turborepo
-npx turbo build
-npm exec turbo build
-npm exec turbo build
+Copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+To enable database connectivity with Neon or a local PostgreSQL instance, configure `DATABASE_URL`:
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```env
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 ```
 
-Without global `turbo`:
+### 3. Database Migrations
 
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
+Generate and apply Drizzle SQL migrations:
+
+```bash
+# Generate SQL migration files from schema
+npm run db:generate
+
+# Apply migrations to the configured database
+npm run db:migrate
+
+# Push schema directly (development prototyping)
+npm run db:push
+
+# Launch Drizzle Studio GUI
+npm run db:studio
 ```
 
-### Develop
+### 4. Running the Complete Monorepo in Development
 
-To develop all apps and packages, run the following command:
+Start the frontend dashboard, Express 5 API, and background worker concurrently:
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
+```bash
+npm run dev
 ```
 
-Without global `turbo`, use your package manager:
+- **Web Dashboard**: [http://localhost:3000](http://localhost:3000)
+- **API Server**: [http://localhost:8000](http://localhost:8000)
+- **API Health Probe**: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+- **Background Worker**: Running independently with structured heartbeat logging
 
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
-```
+---
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## Available Scripts
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+| Command                | Description                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
+| `npm run dev`          | Starts Next.js web, Express API, and worker concurrently via Turbo |
+| `npm run build`        | Compiles all packages and builds the Next.js production bundle     |
+| `npm run typecheck`    | Strict TypeScript check across all 8 applications and packages     |
+| `npm run lint`         | ESLint static analysis across workspaces                           |
+| `npm run format`       | Format repository code with Prettier                               |
+| `npm run format:check` | Verify formatting consistency with Prettier                        |
+| `npm run db:generate`  | Generates SQL migration files using Drizzle Kit                    |
+| `npm run db:migrate`   | Runs migration runner to apply pending SQL migrations              |
+| `npm run db:push`      | Pushes schema directly to database                                 |
+| `npm run db:studio`    | Launches Drizzle Studio web inspector                              |
 
-```sh
-turbo dev --filter=web
-```
+---
 
-Without global `turbo`:
+## Database Architecture
 
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
-```
+11 PostgreSQL tables created with UUID primary keys, explicit decimal numeric precision, foreign keys, and indexes:
 
-### Remote Caching
+1. `users`: User profiles and authentication records.
+2. `wallets`: User-linked EVM and Solana wallet addresses.
+3. `creators`: Discovered & qualified trading creators indexed by stable `x_user_id`.
+4. `creator_metrics`: Win rates, ROI, signal counts, and cumulative returns.
+5. `creator_follows`: User-creator follow relations.
+6. `strategies`: Copy-trading allocation, risk limits (SL/TP), and execution modes.
+7. `signals`: Captured trading calls with direction (BUY/SELL), entry, TP, and SL.
+8. `signal_verifications`: Historical outcome tracking and return calculations.
+9. `orders`: Definitive Flash trade records and transaction states.
+10. `positions`: Active open and closed positions with realized/unrealized P&L.
+11. `arkiv_records`: Entity key references to immutable Arkiv on-chain attestations.
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+---
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+## Phase 1 Implementation Status
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- **Monorepo Foundation**: Configured npm workspaces and Turborepo 2.11 pipelines.
+- **Express 5 API**: Production REST server with probe-backed `/api/health`, `/api/users`, and `/api/creators`.
+- **Drizzle Database Package**: Complete schema, client pooling, migration generation (`0000_slim_overlord.sql`).
+- **Worker Application**: Standalone process with Zod config, structured logger, and graceful shutdown.
+- **Web Dashboard**: Next.js App Router trading dashboard with dark theme, responsive navigation, and 7 complete routes (`/`, `/discover`, `/creators`, `/creators/[id]`, `/signals`, `/strategies`, `/portfolio`, `/activity`).
+- **Integration Packages**: Architectural interfaces, typings, and documentation for `@call-ledger/arkiv`, `@call-ledger/definitive`, and `@call-ledger/strategy-engine`.
