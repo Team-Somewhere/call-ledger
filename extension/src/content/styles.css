@@ -34,6 +34,33 @@
   padding: 12px;
 }
 
+.cl-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  background: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fffaf3;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.cl-brand__tag {
+  background: #f62440;
+  color: #ffffff;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+}
+.cl-brand__name {
+  color: #fffaf3;
+}
+
 .cl-btn {
   display: inline-flex;
   align-items: center;
@@ -49,8 +76,13 @@
   color: #f5b94e;
   transition: background 120ms ease, border-color 120ms ease;
 }
+.cl-btn--active {
+  background: rgba(245, 185, 78, 0.22);
+  border-color: #f5b94e;
+  box-shadow: 0 0 10px rgba(245, 185, 78, 0.25);
+}
 .cl-btn:hover {
-  background: rgba(245, 185, 78, 0.16);
+  background: rgba(245, 185, 78, 0.28);
 }
 .cl-btn:focus-visible,
 .cl-chip:focus-visible,
@@ -80,10 +112,10 @@
 }
 .cl-card {
   position: absolute;
-  z-index: 2147483000;
+  z-index: 2147483647;
   top: calc(100% + 6px);
   left: 0;
-  width: 300px;
+  width: 320px;
   max-width: calc(100vw - 32px);
   background: #0f1115;
   border: 1px solid rgba(255, 255, 255, 0.12);

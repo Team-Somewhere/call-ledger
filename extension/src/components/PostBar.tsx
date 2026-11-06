@@ -13,6 +13,10 @@ export function CallLedgerPostBar({ post, symbols }: { post: DetectedPost; symbo
   return (
     <div className="cl-root cl-postbar" data-testid="callledger-post-bar">
       <div className="cl-postbar__row">
+        <span className="cl-brand" title="CallLedger for X">
+          <span className="cl-brand__tag">CALL</span>
+          <span className="cl-brand__name">LEDGER</span>
+        </span>
         <AnalyzeStrategyButton post={post} onOpen={() => setOpen((v) => !v)} open={open} />
         {symbols.map((s) => (
           <TokenHoverCard key={s} symbol={s} />

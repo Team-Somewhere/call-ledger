@@ -37,12 +37,16 @@ export function AnalyzeStrategyButton({
   const draft = useMemo(() => parseStrategy(cleanPostText(post.text)), [post.text]);
   const actionable = draft.classification === "trading_instruction" || draft.classification === "incomplete_instruction";
 
-  if (!actionable) return null;
-
   return (
-    <button type="button" className="cl-btn cl-btn--ghost" onClick={onOpen} aria-expanded={open}>
+    <button
+      type="button"
+      className={actionable ? "cl-btn cl-btn--active" : "cl-btn cl-btn--ghost"}
+      onClick={onOpen}
+      aria-expanded={open}
+      title={actionable ? "Trading strategy detected" : "Analyze post for trading strategy"}
+    >
       <Sparkles size={12} aria-hidden />
-      {open ? "Hide analysis" : "Analyze strategy"}
+      {open ? "Hide analysis" : actionable ? "Analyze strategy" : "Check strategy"}
     </button>
   );
 }

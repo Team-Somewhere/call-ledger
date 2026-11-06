@@ -25,8 +25,15 @@ function mountForPost(article: HTMLElement) {
 
   const host = document.createElement("div");
   host.setAttribute("data-callledger", "post-bar");
-  host.style.cssText = "all: initial;";
-  article.appendChild(host);
+  host.style.cssText = "display: block; width: 100%; box-sizing: border-box; clear: both;";
+
+  // Mount directly below the tweet action group (reply/repost/like) inside the tweet content column
+  const actionBar = article.querySelector('div[role="group"]');
+  if (actionBar && actionBar.parentElement) {
+    actionBar.parentElement.insertBefore(host, actionBar.nextSibling);
+  } else {
+    article.appendChild(host);
+  }
 
   const root = createRoot(host);
   root.render(<CallLedgerPostBar post={post} symbols={symbols} />);
