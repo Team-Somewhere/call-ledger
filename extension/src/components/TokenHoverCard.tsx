@@ -5,6 +5,7 @@ import { getPreferences } from "../services/storage";
 import { formatCompact, formatCurrency, formatPercent, type DisplayCurrency } from "../utils/formatting";
 import { TokenChart } from "./TokenChart";
 import { sendMessage } from "../services/extension-messaging";
+import { triggerTokenOverlay, hideTokenOverlay } from "./TokenOverlay";
 
 /**
  * Chip for one token mention. Hover (or keyboard focus) shows a card with live
@@ -67,19 +68,38 @@ export function TokenHoverCard({ symbol }: { symbol: string }) {
   return (
     <span
       className="cl-token"
-      onMouseEnter={scheduleShow}
-      onMouseLeave={scheduleHide}
-      onFocus={scheduleShow}
-      onBlur={scheduleHide}
+      onMouseEnter={(e) => {
+        scheduleShow();
+        triggerTokenOverlay(symbol, e.currentTarget, false);
+      }}
+      onMouseLeave={() => {
+        scheduleHide();
+        hideTokenOverlay(false);
+      }}
+      onFocus={(e) => {
+        scheduleShow();
+        triggerTokenOverlay(symbol, e.currentTarget, false);
+      }}
+      onBlur={() => {
+        scheduleHide();
+        hideTokenOverlay(false);
+      }}
     >
       <button
         type="button"
         className="cl-chip"
+        data-callledger-token={symbol}
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          setOpen((v) => !v);
+          triggerTokenOverlay(symbol, e.currentTarget, true);
+        }}
         onKeyDown={(e) => {
-          if (e.key === "Escape") setOpen(false);
+          if (e.key === "Escape") {
+            setOpen(false);
+            hideTokenOverlay(true);
+          }
         }}
       >
         ${symbol}
