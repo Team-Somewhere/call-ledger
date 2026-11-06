@@ -14,7 +14,7 @@ import {
 import { api, ApiRequestError, type CreatorListItem } from "../../lib/api";
 import { useWalletSession } from "../../lib/use-wallet-session";
 import { EmptyState } from "../../components/empty-state";
-import { MonitoringStatusBadge, SourceBadge } from "../../components/source-badge";
+import { MonitoringStatusBadge } from "../../components/source-badge";
 import { ToastProvider, useToast } from "../../components/toast";
 import { cn } from "../../lib/utils";
 
@@ -26,7 +26,7 @@ const SOURCE_META: Record<
 > = {
   X: {
     label: "X (Twitter)",
-    hint: "Enter an X username to add a trader. Public posts and trading signals are indexed via Firecrawl.",
+    hint: "Enter an X username to add a trader",
     glyph: "#",
   },
 };
@@ -159,11 +159,8 @@ function DiscoverContent() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start justify-between gap-4 min-w-0">
         <div className="space-y-1.5 min-w-0 w-full sm:w-auto">
-          <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
-            // CREATOR DISCOVERY & DIRECTORY
-          </div>
           <h1 className="text-[28px] leading-tight font-bold tracking-tight text-[#171717]">
-            Discover Creators
+            Discover Traders
           </h1>
           <p className="text-[11px] leading-relaxed text-[#78716C] font-sans max-w-[520px] break-words">
             Add traders by their X (Twitter) username. Public posts and trading signals are indexed automatically via Firecrawl.
@@ -193,25 +190,11 @@ function DiscoverContent() {
         )}
       </div>
 
-      {/* Banner */}
-      <div className="w-full min-h-[60px] bg-[#171717] text-[#FFFAF3] px-4 py-3 rounded-[3px] flex flex-col justify-center">
-        <div className="text-[10px] text-[#F5B94E] uppercase tracking-wider font-bold">
-          /// X-ONLY TRADER MONITORING
-        </div>
-        <div className="text-[11px] leading-relaxed text-[#D6D3CD] font-sans mt-1">
-          <strong className="text-[#FFFAF3] font-semibold">
-            Following a trader is an off-chain database operation
-          </strong>{" "}
-          — no blockchain transaction, and no X follow is ever performed on your
-          behalf.
-        </div>
-      </div>
-
       {/* Add creator form */}
       <div className="border border-[#E8DFD1] rounded-[3px] bg-[#FFFCF7]">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8DFD1]">
           <div className="text-[11px] font-bold uppercase tracking-wider text-[#171717]">
-            // ADD A CREATOR
+            // ADD A Trader
           </div>
           <Plus className="w-4 h-4 text-[#78716C]" />
         </div>
@@ -341,7 +324,7 @@ function DiscoverContent() {
       {/* Directory */}
       <div className="pt-2 border-t border-[#E8DFD1]">
         <div className="py-3 text-[10px] uppercase text-[#78716C] tracking-widest">
-          // CREATOR DIRECTORY
+          // TRADER DIRECTORY
         </div>
         <div className="border-t border-[#E8DFD1]" />
         {listError && (
@@ -385,17 +368,6 @@ function DiscoverContent() {
                 >
                   {creatorHandle(creator) ?? creator.displayName}
                 </Link>
-                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                  {creator.sources.map((source) => (
-                    <span key={source.id} className="flex items-center gap-1.5">
-                      <SourceBadge sourceType={source.sourceType} />
-                      <MonitoringStatusBadge status={source.status} className="!text-[9px]" />
-                    </span>
-                  ))}
-                  {creator.sources.length === 0 && (
-                    <span className="text-[10px] text-[#78716C]">NO SOURCES</span>
-                  )}
-                </div>
               </div>
             </div>
             <Link

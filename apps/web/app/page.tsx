@@ -3,17 +3,20 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  Check,
   ExternalLink,
   Loader2,
   Search,
+  UserPlus,
 } from "lucide-react";
 import { CreateStrategyModal } from "../components/create-strategy-modal";
 import { SignalCard } from "../components/signal-card";
-import { SourceBadge } from "../components/source-badge";
 import { api, type ActivityPost, type CreatorListItem } from "../lib/api";
-import { MOCK_CREATORS, MOCK_SIGNALS, MockSignal } from "../lib/mock-data";
+import { MOCK_SIGNALS, MockSignal } from "../lib/mock-data";
+import { useWalletSession } from "../lib/use-wallet-session";
 
 export default function TerminalPage() {
+  const { isAuthenticated, connect } = useWalletSession();
   const [filter, setFilter] = useState<
     "ALL" | "SIGNALS_ONLY" | "HIGH_CONVICTION"
   >("SIGNALS_ONLY");
@@ -25,6 +28,18 @@ export default function TerminalPage() {
   const [platformCreators, setPlatformCreators] = useState<CreatorListItem[] | null>(null);
   const [platformPosts, setPlatformPosts] = useState<ActivityPost[] | null>(null);
   const [postsLoading, setPostsLoading] = useState(true);
+  const [featuredCreators, setFeaturedCreators] = useState<CreatorListItem[]>([]);
+  const [followedCreatorIds, setFollowedCreatorIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [featuredCreatorsLoading, setFeaturedCreatorsLoading] = useState(true);
+  const [featuredCreatorsError, setFeaturedCreatorsError] = useState<
+    string | null
+  >(null);
+  const [followActionError, setFollowActionError] = useState<string | null>(
+    null,
+  );
+  const [busyCreatorId, setBusyCreatorId] = useState<string | null>(null);
 
   const loadPlatformFeed = useCallback(async () => {
     setPostsLoading(true);
@@ -65,6 +80,78 @@ export default function TerminalPage() {
   useEffect(() => {
     void loadPlatformFeed();
   }, [loadPlatformFeed]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadFeaturedCreators() {
+      setFeaturedCreatorsLoading(true);
+      setFeaturedCreatorsError(null);
+      try {
+        const { data } = await api.listCreators("?limit=10&sourceType=X");
+        if (!active) return;
+        const xCreators = data.filter((creator) =>
+          creator.sources.some((source) => source.sourceType === "X"),
+        );
+        setFeaturedCreators(xCreators);
+
+        if (isAuthenticated) {
+          try {
+            const { data: following } = await api.listFollowing(
+              "?page=1&limit=100",
+            );
+            if (active) {
+              setFollowedCreatorIds(
+                new Set(following.map((item) => item.creator.id)),
+              );
+            }
+          } catch {
+            if (active) setFollowedCreatorIds(new Set());
+          }
+        } else {
+          setFollowedCreatorIds(new Set());
+        }
+      } catch {
+        if (active) setFeaturedCreatorsError("Could not load X creators.");
+      } finally {
+        if (active) setFeaturedCreatorsLoading(false);
+      }
+    }
+
+    void loadFeaturedCreators();
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
+
+  const toggleFeaturedFollow = async (creator: CreatorListItem) => {
+    setFollowActionError(null);
+    setBusyCreatorId(creator.id);
+    try {
+      if (!isAuthenticated) {
+        const connected = await connect();
+        if (!connected) return;
+      }
+
+      if (followedCreatorIds.has(creator.id)) {
+        await api.unfollowCreator(creator.id);
+        setFollowedCreatorIds((current) => {
+          const next = new Set(current);
+          next.delete(creator.id);
+          return next;
+        });
+      } else {
+        await api.followCreator(creator.id);
+        setFollowedCreatorIds((current) => new Set(current).add(creator.id));
+      }
+    } catch (error) {
+      setFollowActionError(
+        error instanceof Error ? error.message : "Could not update follow.",
+      );
+    } finally {
+      setBusyCreatorId(null);
+    }
+  };
 
   const handleCopy = (signal: MockSignal) => {
     setSelectedSignal(signal);
@@ -109,7 +196,7 @@ export default function TerminalPage() {
   }
 
   return (
-    <div className="space-y-6 px-2">
+    <div className="space-y-6 px-2 lg:flex lg:h-[calc(100dvh-8rem)] lg:flex-col lg:overflow-hidden">
       {/* Top bar: search + testnet badge */}
       <div className="flex items-center gap-3 max-w-2xl mx-auto">
         <div className="relative flex-1">
@@ -126,9 +213,9 @@ export default function TerminalPage() {
       </div>
 
       {/* 3-Column Terminal Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)] lg:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)_minmax(200px,0.9fr)] xl:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(220px,280px)] gap-4 lg:gap-5 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)] lg:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)_minmax(200px,0.9fr)] xl:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(220px,280px)] gap-4 lg:gap-5 items-start lg:flex-1 lg:min-h-0 lg:items-stretch lg:overflow-hidden">
         {/* Column 1: Left Filter & Terminal Stats (2 cols) */}
-        <div className="min-w-0 space-y-5 font-mono">
+        <div className="min-w-0 space-y-5 font-mono lg:overflow-hidden">
           <div>
             <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
               // LIVE FEED
@@ -223,7 +310,7 @@ export default function TerminalPage() {
         </div>
 
         {/* Column 2: Center Live Calls Feed (7 cols) */}
-        <div className="min-w-0 space-y-4 font-mono">
+        <div className="min-w-0 space-y-4 font-mono lg:min-h-0 lg:overflow-y-auto">
           {/* Feed Header */}
           <div className="flex items-center justify-between pb-2 border-b border-[#E8DFD1] text-xs">
             <div className="flex items-center gap-2">
@@ -276,16 +363,10 @@ export default function TerminalPage() {
                             <span className="font-bold text-[#171717]">
                               {post.creatorName}
                             </span>
-                            {(post.authorHandle || post.sourceHandle) && (
-                              <span className="text-[#78716C] text-[11px]">
-                                @{(post.authorHandle ?? post.sourceHandle ?? "").replace(/^@/, "")}
-                              </span>
-                            )}
                             <span className="text-[#78716C] text-[10px]">• {timeAgo}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <SourceBadge sourceType={post.sourceType} />
                           {post.canonicalUrl && (
                             <a
                               href={post.canonicalUrl}
@@ -345,50 +426,97 @@ export default function TerminalPage() {
         </div>
 
         {/* Column 3: Right Side Widgets (3 cols) */}
-        <div className="min-w-0 md:col-span-2 lg:col-span-1 space-y-5 font-mono">
+        <div className="min-w-0 md:col-span-2 lg:col-span-1 space-y-5 font-mono lg:overflow-hidden">
           {/* WHO TO FADE OR FOLLOW */}
           <div className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-3">
             <div className="text-[10px] uppercase text-[#78716C] pb-2 border-b border-[#E8DFD1] tracking-wider">
               WHO TO FADE OR FOLLOW
             </div>
             <div className="divide-y divide-[#E8DFD1]/60">
-              {MOCK_CREATORS.map((creator) => {
-                const isNegative =
-                  creator.averageReturn < 0 || creator.winRate < 70;
-                return (
-                  <Link
-                    key={creator.id}
-                    href={`/creators/${creator.id}`}
-                    className="py-2.5 flex items-center justify-between hover:bg-[#FFF2DB]/40 px-1 rounded transition group"
-                  >
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={creator.avatarUrl}
-                        alt={creator.displayName}
-                        className="w-7 h-7 rounded-full object-cover border border-[#E8DFD1] grayscale group-hover:grayscale-0 transition"
-                      />
-                      <div>
-                        <div className="text-xs font-bold text-[#171717] group-hover:underline">
-                          {creator.displayName.split(" ")[0]}
-                        </div>
-                        <div className="text-[10px] text-[#78716C]">
-                          @{creator.xUsername}
-                        </div>
-                      </div>
-                    </div>
+              {featuredCreatorsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-4 text-[10px] text-[#78716C]">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Loading X creators…
+                </div>
+              ) : featuredCreatorsError ? (
+                <p className="py-3 text-[10px] text-[#F62440]">
+                  {featuredCreatorsError}
+                </p>
+              ) : featuredCreators.length === 0 ? (
+                <p className="py-3 text-[10px] text-[#78716C]">
+                  No X creators yet. Add one from Discover.
+                </p>
+              ) : (
+                featuredCreators.slice(0, 3).map((creator) => {
+                  const xSource = creator.sources.find(
+                    (source) => source.sourceType === "X",
+                  );
+                  const isFollowing = followedCreatorIds.has(creator.id);
+                  return (
                     <div
-                      className={`text-xs font-bold ${
-                        isNegative ? "text-[#F62440]" : "text-[#16A34A]"
-                      }`}
+                      key={creator.id}
+                      className="py-2.5 flex items-center justify-between gap-2 px-1 hover:bg-[#FFF2DB]/40 rounded transition group"
                     >
-                      {isNegative
-                        ? `-${creator.losingSignals * 2.1}%`
-                        : `+${creator.averageReturn}%`}
+                      <Link
+                        href={`/creators/${creator.id}`}
+                        className="flex min-w-0 items-center gap-2"
+                      >
+                        {creator.avatarUrl ? (
+                          <img
+                            src={creator.avatarUrl}
+                            alt={creator.displayName}
+                            className="w-7 h-7 rounded-full object-cover border border-[#E8DFD1] grayscale group-hover:grayscale-0 transition"
+                          />
+                        ) : (
+                          <span className="w-7 h-7 rounded-full bg-[#FFF2DB] border border-[#E8DFD1] flex items-center justify-center text-[9px] font-bold text-[#78716C] shrink-0">
+                            {creator.displayName.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-bold text-[#171717] group-hover:underline">
+                            {creator.displayName}
+                          </span>
+                          {xSource?.handle && (
+                            <span className="block truncate text-[10px] text-[#78716C]">
+                              @{xSource.handle.replace(/^@/, "")}
+                            </span>
+                          )}
+                        </span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => void toggleFeaturedFollow(creator)}
+                        disabled={busyCreatorId === creator.id}
+                        aria-label={
+                          isFollowing
+                            ? `Unfollow ${creator.displayName}`
+                            : `Follow ${creator.displayName}`
+                        }
+                        className={`shrink-0 flex items-center gap-1 rounded-sm border px-2 py-1 text-[9px] font-bold transition disabled:opacity-50 ${
+                          isFollowing
+                            ? "border-[#171717] bg-[#171717] text-[#FFFAF3]"
+                            : "border-[#E8DFD1] text-[#78716C] hover:border-[#171717] hover:text-[#171717]"
+                        }`}
+                      >
+                        {busyCreatorId === creator.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : isFollowing ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <UserPlus className="h-3 w-3" />
+                        )}
+                        {isFollowing ? "FOLLOWING" : "FOLLOW"}
+                      </button>
                     </div>
-                  </Link>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
+            {followActionError && (
+              <p className="mt-2 text-[10px] text-[#F62440]">
+                {followActionError}
+              </p>
+            )}
           </div>
 
           {/* TRENDING TICKERS */}

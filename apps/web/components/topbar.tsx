@@ -34,20 +34,35 @@ function ArkivTxWidget() {
   const [open, setOpen] = useState(false);
   const [latest, setLatest] = useState<ArkivTransaction | null | undefined>(undefined);
   const [recent, setRecent] = useState<ArkivTransaction[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    try {
-      const [latestRes, recentRes] = await Promise.all([
-        api.arkivLatestTransaction(),
-        api.arkivTransactions("?limit=5"),
-      ]);
-      setLatest(latestRes.data ?? null);
-      setRecent(recentRes.data ?? []);
-    } catch {
-      setLatest(null);
-    }
+    const [latestResult, recentResult] = await Promise.allSettled([
+      api.arkivLatestTransaction(),
+      api.arkivTransactions("?limit=5"),
+    ]);
+
+    const latestTx =
+      latestResult.status === "fulfilled" ? latestResult.value.data : null;
+    const recentTxs =
+      recentResult.status === "fulfilled" ? recentResult.value.data : [];
+    setLatest(latestTx ?? recentTxs[0] ?? null);
+    setRecent(recentTxs);
+    const loadFailure =
+      latestResult.status === "rejected"
+        ? latestResult.reason
+        : recentResult.status === "rejected"
+          ? recentResult.reason
+          : null;
+    setLoadError(
+      !latestTx && recentTxs.length === 0 && loadFailure
+        ? loadFailure instanceof Error
+          ? loadFailure.message
+          : "Could not load Arkiv transactions."
+        : null,
+    );
   }, []);
 
   // Load on mount and poll every 30s
@@ -117,7 +132,17 @@ function ArkivTxWidget() {
           </div>
 
           {/* Latest tx */}
-          {!hasLatest ? (
+          {loadError && !hasLatest ? (
+            <div className="px-3 py-6 text-center">
+              <AlertCircle className="w-5 h-5 text-[#F62440] mx-auto mb-2" />
+              <div className="text-[11px] font-bold text-[#171717]">
+                Could not load transactions
+              </div>
+              <p className="text-[10px] text-[#78716C] mt-1 font-sans">
+                {loadError}
+              </p>
+            </div>
+          ) : !hasLatest ? (
             <div className="px-3 py-6 text-center">
               <Zap className="w-5 h-5 text-[#E8DFD1] mx-auto mb-2" />
               <div className="text-[11px] font-bold text-[#171717]">No transactions yet</div>
@@ -206,8 +231,8 @@ function TxRow({
         >
           {tx.status}
         </span>
-        <code className="text-[10px] font-mono text-[#171717] flex-1 truncate">
-          {tx.txHash.slice(0, 18)}…{tx.txHash.slice(-6)}
+        <code className="text-[10px] font-mono text-[#171717] flex-1 break-all">
+          {tx.txHash}
         </code>
         <div className="flex items-center gap-1 shrink-0">
           <button

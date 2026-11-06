@@ -50,6 +50,13 @@
       "when": 1762416000000,
       "tag": "0006_arkiv_transactions",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793985651458,
+      "tag": "0007_backfill_arkiv_transactions",
+      "breakpoints": true
     }
   ]
 }
