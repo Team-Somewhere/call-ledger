@@ -50,18 +50,19 @@ const workerEnvSchema = z.object({
     .int()
     .positive()
     .default(3600),
+  // For X sources: fetch latest 5 posts per trader per cycle
   MONITORING_DEFAULT_POST_LIMIT: z.coerce
     .number()
     .int()
     .min(1)
     .max(100)
-    .default(20),
+    .default(5),
   MONITORING_INITIAL_POST_LIMIT: z.coerce
     .number()
     .int()
     .min(1)
     .max(100)
-    .default(20),
+    .default(5),
   MONITORING_MAX_RETRIES: z.coerce.number().int().min(1).max(20).default(3),
   MONITORING_LOCK_LEASE_SECONDS: z.coerce
     .number()
@@ -98,7 +99,7 @@ const workerEnvSchema = z.object({
     .int()
     .min(1000)
     .max(300000)
-    .default(5000),
+    .default(60000), // check for due sources every 60 seconds
   FIRECRAWL_ENABLED: z
     .string()
     .optional()
@@ -132,10 +133,22 @@ const workerEnvSchema = z.object({
     .int()
     .min(5)
     .max(1440)
-    .default(30),
+    .default(15),
+  X_MONITOR_INTERVAL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(1440)
+    .default(15),
   X_MONITOR_MAX_TRADERS_PER_CYCLE: z.coerce.number().int().min(1).max(50).default(5),
   X_MONITOR_MAX_REQUESTS_PER_DAY: z.coerce.number().int().min(1).max(10000).default(10),
   X_MONITOR_ESTIMATED_CREDITS_PER_REQUEST: z.coerce.number().int().min(1).default(30),
+  // Firecrawl budget controls
+  FIRECRAWL_MAX_REQUESTS_PER_CYCLE: z.coerce.number().int().min(1).max(100).default(10),
+  FIRECRAWL_MAX_REQUESTS_PER_DAY: z.coerce.number().int().min(1).max(10000).default(50),
+  FIRECRAWL_MAX_CONCURRENT_REQUESTS: z.coerce.number().int().min(1).max(10).default(2),
+  // Worker status heartbeat
+  WORKER_STATUS_PORT: z.coerce.number().int().min(1).max(65535).default(8001),
 });
 
 const parsed = workerEnvSchema.safeParse(process.env);

@@ -6,6 +6,7 @@
  *  2. Checking whether a post is already archived (deduplication).
  *  3. Writing new archived post entities to Arkiv Rabdi.
  *  4. Recording the Arkiv reference in the local arkiv_records table.
+ *  5. Recording every confirmed write in the arkiv_transactions history table.
  *
  * SECURITY:
  *  - ARKIV_ARCHIVER_PRIVATE_KEY is read from env and NEVER logged.
@@ -19,8 +20,8 @@ import {
   createArkivPublicClient,
   createArkivWalletClient,
 } from "@call-ledger/arkiv";
-import { arkivRecords, db } from "@call-ledger/database";
-import { eq, and } from "drizzle-orm";
+import { arkivRecords, arkivTransactions, creators, db } from "@call-ledger/database";
+import { and, eq } from "drizzle-orm";
 import { env } from "../config/env";
 import { logger } from "./logger";
 import { classifyPost } from "./signal-classifier";
@@ -109,7 +110,7 @@ export function getRemainingBudget(): number {
 export function consumeBudget(): boolean {
   resetBudgetIfNewDay();
   if (budget.usedRequests >= env.X_MONITOR_MAX_REQUESTS_PER_DAY) {
-    return false; // budget exhausted
+    return false;
   }
   budget.usedRequests++;
   return true;
@@ -128,12 +129,11 @@ export function getBudgetStats(): {
     usedRequests: budget.usedRequests,
     maxRequests: env.X_MONITOR_MAX_REQUESTS_PER_DAY,
     remaining: getRemainingBudget(),
-    estimatedCredits:
-      budget.usedRequests * env.X_MONITOR_ESTIMATED_CREDITS_PER_REQUEST,
+    estimatedCredits: budget.usedRequests * env.X_MONITOR_ESTIMATED_CREDITS_PER_REQUEST,
   };
 }
 
-// ─── Archive a post ───────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────
 
 export interface PostToArchive {
   /** creator_source_posts.id */
@@ -162,6 +162,8 @@ export interface ArchiveResult {
   expiresAt?: Date;
 }
 
+// ─── Core archive function ────────────────────────────────────────────────
+
 /**
  * Archive a single post to Arkiv.
  *
@@ -169,10 +171,12 @@ export interface ArchiveResult {
  *  1. Check arkiv_records (fast local dedup).
  *  2. Check Arkiv directly (slow dedup, catches cross-instance races).
  *  3. Classify trading-related content.
- *  4. Write entity to Arkiv.
- *  5. Record reference in arkiv_records.
+ *  4. Write entity to Arkiv — wait for confirmation.
+ *  5. Record reference in arkiv_records (dedup index).
+ *  6. Record receipt in arkiv_transactions (full history).
  *
  * Returns `skipped=true` if the post was already archived or couldn't be written.
+ * Returns `skipped=false` only after a confirmed write with a real txHash.
  */
 export async function archivePostIfNew(
   post: PostToArchive,
@@ -190,7 +194,11 @@ export async function archivePostIfNew(
     .limit(1);
 
   if (existing[0]) {
-    return { skipped: true, reason: "already-in-local-db", entityKey: existing[0].entityKey };
+    return {
+      skipped: true,
+      reason: "already-in-local-db",
+      entityKey: existing[0].entityKey,
+    };
   }
 
   const publicClient = getPublicClient();
@@ -200,22 +208,25 @@ export async function archivePostIfNew(
     return { skipped: true, reason: "arkiv-write-not-configured" };
   }
 
-  // 2. Slow dedup — query Arkiv directly (catches concurrent workers)
+  // 2. Slow dedup — query Arkiv directly (catches concurrent workers / restarts)
   if (publicClient) {
     const existingKey = await checkPostExists(publicClient, post.sourcePostId);
     if (existingKey) {
-      // Record this locally so we don't check Arkiv again next time
-      await db.insert(arkivRecords).values({
-        recordType: "ARCHIVED_X_POST",
-        entityKey: existingKey,
-        entityId: post.sourcePostId,
-        sourcePlatform: "x",
-        sourcePostId: post.sourcePostId,
-        authorUsername: post.authorHandle.toLowerCase(),
-        relatedCreatorId: post.creatorId,
-        creatorSourcePostId: post.creatorSourcePostId,
-        tradingRelated: false,
-      }).onConflictDoNothing();
+      // Recover this locally so we don't check Arkiv again next time
+      await db
+        .insert(arkivRecords)
+        .values({
+          recordType: "ARCHIVED_X_POST",
+          entityKey: existingKey,
+          entityId: post.sourcePostId,
+          sourcePlatform: "x",
+          sourcePostId: post.sourcePostId,
+          authorUsername: post.authorHandle.toLowerCase(),
+          relatedCreatorId: post.creatorId,
+          creatorSourcePostId: post.creatorSourcePostId,
+          tradingRelated: false,
+        })
+        .onConflictDoNothing();
       return { skipped: true, reason: "already-in-arkiv", entityKey: existingKey };
     }
   }
@@ -223,11 +234,12 @@ export async function archivePostIfNew(
   // 3. Classify content
   const classification = classifyPost(post.content);
   logger.info(
-    `[FILTER] Post ${post.sourcePostId} classified: tradingRelated=${classification.tradingRelated} (score=${classification.confidence})`,
+    `[FILTER] Post ${post.sourcePostId}: tradingRelated=${classification.tradingRelated} (score=${classification.confidence})`,
   );
 
-  // 4. Archive to Arkiv
+  // 4. Write to Arkiv — waits for on-chain confirmation
   logger.info(`[ARKIV] Archiving post ${post.sourcePostId} by @${post.authorHandle}`);
+  const submittedAt = new Date();
 
   let archiveResult: { entityKey: string; txHash: string; expiresAt: Date };
   try {
@@ -236,7 +248,9 @@ export async function archivePostIfNew(
       authorUsername: post.authorHandle,
       authorDisplayName: post.authorDisplayName,
       postText: post.content ?? "",
-      postUrl: post.canonicalUrl ?? `https://x.com/${post.authorHandle}/status/${post.sourcePostId}`,
+      postUrl:
+        post.canonicalUrl ??
+        `https://x.com/${post.authorHandle}/status/${post.sourcePostId}`,
       originalCreatedAt: post.publishedAt,
       capturedAt: new Date(),
       contentFidelity: "UNKNOWN",
@@ -248,29 +262,70 @@ export async function archivePostIfNew(
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown Arkiv write error";
     logger.error(`[ARKIV] Failed to archive post ${post.sourcePostId}: ${msg}`);
-    // Do NOT mark as archived — caller will see skipped=false and can retry
+    // Do NOT record anything — caller must not treat this as archived
     return { skipped: false, reason: `arkiv-write-failed: ${msg}` };
   }
 
+  const confirmedAt = new Date();
   logger.info(
-    `[ARKIV] Entity creation successful — key=${archiveResult.entityKey} tx=${archiveResult.txHash}`,
+    `[ARKIV] Confirmed — entityKey=${archiveResult.entityKey} txHash=${archiveResult.txHash}`,
   );
 
-  // 5. Record reference in local DB
-  await db.insert(arkivRecords).values({
-    recordType: "ARCHIVED_X_POST",
-    entityKey: archiveResult.entityKey,
-    entityId: post.sourcePostId,
-    txHash: archiveResult.txHash,
-    sourcePlatform: "x",
-    sourcePostId: post.sourcePostId,
-    authorUsername: post.authorHandle.toLowerCase(),
-    contentFidelity: "UNKNOWN",
-    tradingRelated: classification.tradingRelated,
-    expiresAt: archiveResult.expiresAt,
-    relatedCreatorId: post.creatorId,
-    creatorSourcePostId: post.creatorSourcePostId,
-  }).onConflictDoNothing();
+  // Resolve trader username for the transaction record
+  let traderUsername: string | null = post.authorHandle ?? null;
+  try {
+    const [creatorRow] = await db
+      .select({ xUsername: creators.xUsername })
+      .from(creators)
+      .where(eq(creators.id, post.creatorId))
+      .limit(1);
+    if (creatorRow?.xUsername) traderUsername = creatorRow.xUsername;
+  } catch {
+    // non-fatal — denormalized field
+  }
+
+  // 5. Record dedup reference in arkiv_records
+  await db
+    .insert(arkivRecords)
+    .values({
+      recordType: "ARCHIVED_X_POST",
+      entityKey: archiveResult.entityKey,
+      entityId: post.sourcePostId,
+      txHash: archiveResult.txHash,
+      sourcePlatform: "x",
+      sourcePostId: post.sourcePostId,
+      authorUsername: post.authorHandle.toLowerCase(),
+      contentFidelity: "UNKNOWN",
+      tradingRelated: classification.tradingRelated,
+      expiresAt: archiveResult.expiresAt,
+      relatedCreatorId: post.creatorId,
+      creatorSourcePostId: post.creatorSourcePostId,
+    })
+    .onConflictDoNothing();
+
+  // 6. Record full receipt in arkiv_transactions (never skip this)
+  try {
+    await db
+      .insert(arkivTransactions)
+      .values({
+        entityKey: archiveResult.entityKey,
+        txHash: archiveResult.txHash,
+        sourcePostId: post.sourcePostId,
+        traderId: post.creatorId,
+        traderUsername: traderUsername ?? post.authorHandle,
+        status: "CONFIRMED",
+        submittedAt,
+        confirmedAt,
+        expiresAt: archiveResult.expiresAt,
+      })
+      .onConflictDoNothing(); // idempotent on txHash unique constraint
+  } catch (err) {
+    // Log but don't fail — the Arkiv write already succeeded
+    logger.error(
+      `[ARKIV] Failed to record transaction receipt for ${archiveResult.txHash}`,
+      err,
+    );
+  }
 
   return {
     skipped: false,
