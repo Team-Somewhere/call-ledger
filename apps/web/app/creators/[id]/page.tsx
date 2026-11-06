@@ -1,227 +1,387 @@
 "use client";
 
-import React, { use, useState } from "react";
+import React, { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, ShieldCheck } from "lucide-react";
-import { CreateStrategyModal } from "../../../components/create-strategy-modal";
-import { PerformanceChart } from "../../../components/performance-chart";
-import { MOCK_CREATORS, MOCK_SIGNALS } from "../../../lib/mock-data";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  ExternalLink,
+  Loader2,
+  ShieldCheck,
+  UserMinus,
+  UserPlus,
+} from "lucide-react";
+import {
+  api,
+  ApiRequestError,
+  type ActivityPost,
+  type CreatorDetailResponse,
+} from "../../../lib/api";
+import { useWalletSession } from "../../../lib/use-wallet-session";
+import { EmptyState } from "../../../components/empty-state";
+import {
+  MonitoringStatusBadge,
+  SourceBadge,
+  VerificationBadge,
+  sourceDisplayHandle,
+} from "../../../components/source-badge";
+import { ToastProvider, useToast } from "../../../components/toast";
 
 interface CreatorPageProps {
   params: Promise<{ id: string }>;
 }
 
-export default function CreatorProfilePage({ params }: CreatorPageProps) {
-  const resolvedParams = use(params);
-  const creatorId = resolvedParams.id;
+function CreatorProfileContent({ id }: { id: string }) {
+  const { isAuthenticated, connect, isConnecting } = useWalletSession();
+  const { notify } = useToast();
 
-  const creator =
-    MOCK_CREATORS.find((c) => c.id === creatorId) || MOCK_CREATORS[0]!;
+  const [creator, setCreator] = useState<CreatorDetailResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [posts, setPosts] = useState<ActivityPost[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+  const [postsError, setPostsError] = useState<string | null>(null);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.getCreator(id);
+      setCreator(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError
+          ? err.message
+          : "Could not load creator.",
+      );
+    }
+  }, [id]);
 
-  const isNegative = creator.averageReturn < 0 || creator.winRate < 70;
-  const returnString = isNegative
-    ? `-${creator.losingSignals * 2.1}%`
-    : `+${creator.averageReturn}%`;
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  return (
-    <div className="space-y-6 max-w-5xl mx-auto font-mono">
-      {/* Back button */}
-      <div>
+  useEffect(() => {
+    let active = true;
+    void api
+      .creatorPosts(id, "?limit=5&includeReplies=true&includeReposts=true")
+      .then(({ data }) => {
+        if (active) setPosts(data);
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setPostsError(
+            err instanceof ApiRequestError
+              ? err.message
+              : "Could not load recent posts.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setPostsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  const toggleFollow = async () => {
+    if (!creator) return;
+    if (!isAuthenticated) {
+      notify("error", "Sign in with your wallet to follow creators.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (creator.isFollowing) {
+        await api.unfollowCreator(creator.id);
+        notify("success", `Unfollowed ${creator.displayName}`);
+      } else {
+        await api.followCreator(creator.id);
+        notify("success", `Following ${creator.displayName}`);
+      }
+      await load();
+    } catch (err) {
+      notify(
+        "error",
+        err instanceof ApiRequestError ? err.message : "Action failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 font-mono space-y-4">
         <Link
           href="/discover"
-          className="inline-flex items-center gap-1.5 text-xs text-[#78716C] hover:text-[#171717] transition"
+          className="inline-flex items-center gap-1.5 text-xs text-[#78716C] hover:text-[#171717]"
         >
-          &lt; BACK TO LEADERBOARD
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Discover
         </Link>
-      </div>
-
-      {/* Header matching Screenshot 4 */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2">
-        <div className="flex items-center gap-3.5">
-          <img
-            src={creator.avatarUrl}
-            alt={creator.displayName}
-            className="w-12 h-12 rounded-full object-cover border border-[#E8DFD1] grayscale"
-          />
-          <div>
-            <div className="text-[10px] text-[#78716C] uppercase tracking-widest">
-              // DOSSIER
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold text-[#171717]">
-                @{creator.xUsername}
-              </h1>
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-bold border ${
-                  isNegative
-                    ? "bg-[#F62440]/10 text-[#F62440] border-[#F62440]/30"
-                    : "bg-[#16A34A]/10 text-[#16A34A] border-[#16A34A]/30"
-                }`}
-              >
-                {returnString} track record
-              </span>
-            </div>
-            <div className="text-[10px] text-[#78716C] space-x-3 mt-1">
-              <span>
-                {creator.verifiedSignals}/{creator.totalSignals} SCORED
-              </span>
-              <span>•</span>
-              <span>{creator.winRate}% WIN</span>
-              <span>•</span>
-              <span>0% WALLET CONTRADICTS</span>
-              <span>•</span>
-              <span>{(creator.totalSignals / 4).toFixed(1)}/WK</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <a
-            href={`https://x.com/${creator.xUsername}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-[#78716C] hover:text-[#171717] flex items-center gap-1 border border-[#E8DFD1] px-2.5 py-1 rounded-sm bg-[#FFFAF3]"
-          >
-            VIEW ON X &gt;
-          </a>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="text-xs font-bold bg-[#171717] hover:bg-black text-[#FFFAF3] px-3.5 py-1 rounded-sm transition"
-          >
-            + COPY CALLS
-          </button>
+        <div className="text-xs p-3 rounded-sm border bg-[#F62440]/10 border-[#F62440]/30 text-[#F62440]">
+          {error}
         </div>
       </div>
+    );
+  }
 
-      {/* Dither Halftone Banner */}
-      <div className="w-full bg-[#171717] text-[#FFFAF3] p-3 rounded-sm flex items-center justify-between text-xs">
-        <span className="text-[10px] tracking-widest uppercase font-bold text-[#FFE5BF]">
-          SEPARATING SIGNAL FROM THE NOISE
-        </span>
-        <span className="text-[10px] text-slate-400">
-          ARKIV IMMUTABLE RECORD #{creator.arkivAttestationKey}
-        </span>
+  if (!creator) {
+    return (
+      <div className="max-w-3xl mx-auto py-16 flex items-center justify-center text-xs text-[#78716C] gap-2 font-mono">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading creator…
       </div>
+    );
+  }
 
-      {/* Two-Column Verdict and Analysis */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 border border-[#E8DFD1] p-5 rounded-sm bg-[#FFFAF3]">
-        {/* Left: The Verdict */}
-        <div className="space-y-3">
-          <div className="text-[10px] text-[#78716C] uppercase tracking-wider">
-            // THE VERDICT
-          </div>
-          <div
-            className={`text-5xl font-bold font-mono tracking-tight ${
-              isNegative ? "text-[#F62440]" : "text-[#16A34A]"
-            }`}
-          >
-            {returnString}
-          </div>
-          <div className="text-xs text-[#78716C] font-sans leading-relaxed pt-1">
-            $1,000 into every call &rarr;{" "}
-            {isNegative
-              ? "$-24. Holding ETH instead &rarr; $-12."
-              : "+$248. Holding ETH instead &rarr; +$65."}
-            <br />
-            {creator.verifiedSignals} SETTLED CALLS • {creator.winRate}% WIN
-            RATE
-          </div>
-        </div>
+  const waiting = creator.sources.some(
+    (s) => s.status === "WAITING_FOR_AUTHORIZED_ACCESS",
+  );
 
-        {/* Right: Metrics & Spread */}
-        <div className="space-y-4 text-xs">
-          <div>
-            <div className="text-[10px] text-[#78716C] uppercase tracking-wider mb-1.5">
-              // CUMULATIVE P&amp;L PER CALL
-            </div>
-            <div className="h-16 border border-[#E8DFD1] bg-[#FFF2DB]/30 rounded-sm p-1">
-              <PerformanceChart
-                height={55}
-                strokeColor={isNegative ? "#F62440" : "#16A34A"}
-                fillColor={isNegative ? "#F62440" : "#16A34A"}
-                labels={[]}
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto font-mono">
+      <Link
+        href="/discover"
+        className="inline-flex items-center gap-1.5 text-xs text-[#78716C] hover:text-[#171717]"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" /> Back to Discover
+      </Link>
+
+      {/* Header card */}
+      <div className="border border-[#E8DFD1] rounded-sm bg-[#FFFAF3] p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            {creator.avatarUrl ? (
+              <img
+                src={creator.avatarUrl}
+                alt={creator.displayName}
+                className="w-14 h-14 rounded-full object-cover border border-[#E8DFD1]"
               />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-[#FFF2DB] border border-[#E8DFD1] flex items-center justify-center text-sm text-[#78716C] font-bold">
+                {creator.displayName.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold tracking-tight text-[#171717] truncate">
+                {creator.displayName}
+              </h1>
+              <div className="text-[11px] text-[#78716C] mt-0.5">
+                {creator.followersCount} follower
+                {creator.followersCount === 1 ? "" : "s"} on CallLedger · added{" "}
+                {new Date(creator.createdAt).toLocaleDateString()}
+              </div>
             </div>
           </div>
 
-          <div>
-            <div className="text-[10px] text-[#78716C] uppercase tracking-wider mb-1">
-              // SIGNAL MIX
-            </div>
-            <div className="w-full h-2 rounded-xs bg-[#E8DFD1] flex overflow-hidden">
-              <div className="bg-[#16A34A] h-full" style={{ width: "65%" }} />
-              <div className="bg-[#FFE5BF] h-full" style={{ width: "20%" }} />
-              <div className="bg-[#F62440] h-full" style={{ width: "15%" }} />
-            </div>
-            <div className="flex justify-between text-[9px] text-[#78716C] mt-1">
-              <span>■ DIRECTIONAL 65%</span>
-              <span>■ TARGET 20%</span>
-              <span>■ AMBIGUOUS 15%</span>
-            </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!isAuthenticated ? (
+              <button
+                onClick={() => void connect()}
+                disabled={isConnecting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#171717] hover:bg-black text-[#FFFAF3] rounded-sm text-xs transition disabled:opacity-50"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                {isConnecting ? "Signing…" : "Sign in to follow"}
+              </button>
+            ) : (
+              <button
+                onClick={() => void toggleFollow()}
+                disabled={busy}
+                className={
+                  creator.isFollowing
+                    ? "flex items-center gap-1.5 px-3 py-1.5 border border-[#E8DFD1] hover:border-[#F62440] hover:text-[#F62440] text-[#78716C] rounded-sm text-xs transition disabled:opacity-50"
+                    : "flex items-center gap-1.5 px-3 py-1.5 bg-[#171717] hover:bg-black text-[#FFFAF3] rounded-sm text-xs font-bold transition disabled:opacity-50"
+                }
+              >
+                {busy ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : creator.isFollowing ? (
+                  <UserMinus className="w-3.5 h-3.5" />
+                ) : (
+                  <UserPlus className="w-3.5 h-3.5" />
+                )}
+                {creator.isFollowing ? "Unfollow" : "Follow"}
+              </button>
+            )}
           </div>
         </div>
+
+        {creator.description && (
+          <p className="mt-3 text-xs text-[#78716C] font-sans leading-relaxed">
+            {creator.description}
+          </p>
+        )}
       </div>
 
-      {/* Metrics Row Grid matching Screenshot 4 */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-0 border border-[#E8DFD1] rounded-sm divide-y sm:divide-y-0 sm:divide-x divide-[#E8DFD1] bg-[#FFF2DB]/30 text-center">
-        <div className="p-3">
-          <div className="text-[9px] text-[#78716C] uppercase">WIN RATE</div>
-          <div className="text-base font-bold text-[#171717] mt-1">
-            {creator.winRate}%
-          </div>
-        </div>
-        <div className="p-3">
-          <div className="text-[9px] text-[#78716C] uppercase">SETTLED</div>
-          <div className="text-base font-bold text-[#171717] mt-1">
-            {creator.verifiedSignals}
-          </div>
-        </div>
-        <div className="p-3">
-          <div className="text-[9px] text-[#78716C] uppercase">
-            SCORED / TOTAL
-          </div>
-          <div className="text-base font-bold text-[#171717] mt-1">
-            {creator.verifiedSignals}/{creator.totalSignals}
-          </div>
-        </div>
-        <div className="p-3">
-          <div className="text-[9px] text-[#78716C] uppercase">
-            WALLET CONTRADICTS
-          </div>
-          <div className="text-base font-bold text-[#171717] mt-1">0%</div>
-        </div>
-        <div className="p-3">
-          <div className="text-[9px] text-[#78716C] uppercase">CADENCE</div>
-          <div className="text-base font-bold text-[#171717] mt-1">
-            {(creator.totalSignals / 3).toFixed(1)}/wk
-          </div>
-        </div>
-      </div>
-
-      {/* Equity Curve Chart Section matching Screenshot 4 */}
-      <div className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-4 space-y-3">
-        <div className="flex items-center justify-between text-xs pb-2 border-b border-[#E8DFD1]">
-          <span className="text-[10px] text-[#78716C] uppercase">
-            // EQUITY CURVE • $1,000 PER CALL VS HOLDING ETH
+      {waiting && (
+        <div className="flex items-start gap-2 text-[11px] text-[#78716C] font-sans bg-[#FFE5BF]/50 border border-[#E8DFD1] rounded-sm px-3 py-2.5">
+          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>
+            <strong className="text-[#171717]">
+              WAITING_FOR_AUTHORIZED_ACCESS
+            </strong>{" "}
+            — One or more sources need authorized provider access before posts
+            can be collected.
           </span>
-          <span className="text-[10px] text-[#78716C]">
-            PRICING VIA ARKIV ORACLES
-          </span>
         </div>
-        <PerformanceChart
-          height={200}
-          strokeColor={isNegative ? "#F62440" : "#16A34A"}
-          fillColor={isNegative ? "#F62440" : "#16A34A"}
-        />
+      )}
+
+      {/* Sources */}
+      <div className="border border-[#E8DFD1] rounded-sm">
+        <div className="px-4 py-3 border-b border-[#E8DFD1] text-xs font-bold uppercase tracking-wider text-[#171717]">
+          // Connected source profiles
+        </div>
+        <div className="divide-y divide-[#E8DFD1]">
+          {creator.sources.map((source) => (
+            <div key={source.id} className="px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <SourceBadge sourceType={source.sourceType} />
+                  <a
+                    href={source.canonicalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-[#171717] hover:underline truncate flex items-center gap-1"
+                  >
+                    {sourceDisplayHandle(source)}
+                    <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                  </a>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <VerificationBadge status={source.verificationStatus} />
+                  <MonitoringStatusBadge status={source.status} />
+                </div>
+              </div>
+              <div className="text-[10px] text-[#78716C] flex flex-wrap gap-x-3 gap-y-1">
+                <span>IDENTITY: {source.externalId ?? "unresolved"}</span>
+                <span>
+                  LINK: {source.linkRelationshipType ?? "unknown"}
+                  {source.linkVerificationMethod
+                    ? ` / ${source.linkVerificationMethod}`
+                    : ""}
+                </span>
+                <span>
+                  LAST FETCH:{" "}
+                  {source.lastFetchedAt
+                    ? new Date(source.lastFetchedAt).toLocaleString()
+                    : "never"}
+                </span>
+                {source.lastError && (
+                  <span className="text-[#F62440]">
+                    ERROR: {source.lastError}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {creator.sources.length === 0 && (
+            <div className="px-4 py-6 text-xs text-[#78716C]">
+              No source profiles linked.
+            </div>
+          )}
+        </div>
       </div>
 
-      <CreateStrategyModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        defaultCreatorId={creator.id}
-      />
+      {/* Monitoring status summary */}
+      <div className="border border-[#E8DFD1] rounded-sm bg-[#FFF2DB]/30 p-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-[#171717] mb-2">
+          // Monitoring status
+        </div>
+        <div className="space-y-1.5 text-[11px] text-[#78716C] font-sans">
+          {creator.sources.length === 0 && <p>No monitoring configured.</p>}
+          {creator.sources.map((source) => (
+            <p key={source.id} className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3 shrink-0" />
+              <span className="font-mono">{source.sourceType}</span> —{" "}
+              {source.status === "ACTIVE"
+                ? source.lastFetchedAt
+                  ? `active; last fetched ${new Date(source.lastFetchedAt).toLocaleString()}.`
+                  : "active; waiting for its first scheduled fetch."
+                : source.status === "WAITING_FOR_AUTHORIZED_ACCESS"
+                  ? "awaiting authorized provider access. No posts are being fetched."
+                  : source.status.toLowerCase() + "."}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      <section className="space-y-3">
+        <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
+          // RECENT SOURCE POSTS
+        </div>
+        {postsError && (
+          <div className="rounded-sm border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+            {postsError}
+          </div>
+        )}
+        {postsLoading ? (
+          <div className="h-24 animate-pulse rounded-sm border border-[#E8DFD1] bg-[#FFFAF3]" />
+        ) : posts.length === 0 ? (
+          <EmptyState
+            icon={<ExternalLink className="w-5 h-5" />}
+            title="No posts collected yet"
+            description={
+              waiting
+                ? "Posts will appear when an authorized source becomes available."
+                : "This creator's connected sources have not produced any posts yet."
+            }
+          />
+        ) : (
+          <div className="divide-y divide-[#E8DFD1] rounded-sm border border-[#E8DFD1] bg-[#FFFAF3]">
+            {posts.map((post) => (
+              <article key={post.id} className="space-y-2 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <SourceBadge sourceType={post.sourceType} />
+                    {post.isReply && (
+                      <span className="text-[9px] text-[#78716C]">REPLY</span>
+                    )}
+                    {post.isRepost && (
+                      <span className="text-[9px] text-[#78716C]">REPOST</span>
+                    )}
+                  </div>
+                  <time className="text-[10px] text-[#78716C]">
+                    {new Date(
+                      post.publishedAt ?? post.fetchedAt,
+                    ).toLocaleString()}
+                  </time>
+                </div>
+                {post.title && (
+                  <h2 className="text-xs font-bold text-[#171717]">
+                    {post.title}
+                  </h2>
+                )}
+                {post.content && (
+                  <p className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-[#292524]">
+                    {post.content}
+                  </p>
+                )}
+                {post.canonicalUrl && (
+                  <a
+                    href={post.canonicalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] text-[#78716C] hover:text-[#171717]"
+                  >
+                    Original source <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
+  );
+}
+
+export default function CreatorPage({ params }: CreatorPageProps) {
+  const { id } = use(params);
+  return (
+    <ToastProvider>
+      <CreatorProfileContent id={id} />
+    </ToastProvider>
   );
 }
