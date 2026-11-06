@@ -102,7 +102,7 @@ const workerEnvSchema = z.object({
   FIRECRAWL_ENABLED: z
     .string()
     .optional()
-    .transform((value) => value === "true"),
+    .transform((value) => value === "true" || (!value && Boolean(process.env.FIRECRAWL_API_KEY))),
   FIRECRAWL_API_KEY: z.string().optional(),
   FIRECRAWL_MAX_PAGES_PER_RUN: z.coerce
     .number()

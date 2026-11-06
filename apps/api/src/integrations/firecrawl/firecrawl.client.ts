@@ -34,6 +34,12 @@ export interface FirecrawlScrapeResult {
   publishedAt: string | null;
 }
 
+export interface FirecrawlSearchResult {
+  url: string;
+  title: string | null;
+  description: string | null;
+}
+
 const BLOCKED_TARGET_HOSTS = [
   "x.com",
   "www.x.com",
@@ -76,12 +82,18 @@ export class FirecrawlClient {
     }
   }
 
-  async scrape(rawUrl: string): Promise<FirecrawlScrapeResult> {
+  async scrape(
+    rawUrl: string,
+    options?: { allowSocial?: boolean },
+  ): Promise<FirecrawlScrapeResult> {
     this.assertAvailable();
 
     const url = await assertSafeUrl(rawUrl);
 
-    if (BLOCKED_TARGET_HOSTS.includes(url.hostname.toLowerCase())) {
+    if (
+      !options?.allowSocial &&
+      BLOCKED_TARGET_HOSTS.includes(url.hostname.toLowerCase())
+    ) {
       throw new SourceAdapterError(
         "TARGET_NOT_ALLOWED",
         "Firecrawl may not be used to access X/Twitter content",
@@ -195,6 +207,78 @@ export class FirecrawlClient {
         statusCode: payload.data.metadata?.statusCode ?? null,
         publishedAt: payload.data.metadata?.publishedTime ?? null,
       };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async search(
+    query: string,
+    limit = 10,
+  ): Promise<FirecrawlSearchResult[]> {
+    this.assertAvailable();
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await this.fetchImpl(`${this.baseUrl}/v1/search`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          query,
+          limit,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new SourceAdapterError(
+          "FIRECRAWL_PROVIDER_ERROR",
+          `The search provider responded with HTTP ${response.status}`,
+          502,
+          response.status >= 500,
+        );
+      }
+
+      const payload = (await readJsonWithLimit(
+        response,
+        this.maxResponseBytes,
+      )) as {
+        success?: boolean;
+        data?: Array<{
+          url?: string;
+          title?: string;
+          description?: string;
+        }>;
+      } | null;
+
+      if (!payload?.data) return [];
+
+      return payload.data.map((item) => ({
+        url: item.url ?? "",
+        title: item.title?.trim() || null,
+        description: item.description?.trim() || null,
+      }));
+    } catch (error) {
+      if (error instanceof SourceAdapterError) throw error;
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new SourceAdapterError(
+          "FIRECRAWL_TIMEOUT",
+          "Search request timed out",
+          504,
+          true,
+        );
+      }
+      throw new SourceAdapterError(
+        "FIRECRAWL_SEARCH_FAILED",
+        error instanceof Error ? error.message : "Failed to execute search",
+        502,
+        true,
+      );
     } finally {
       clearTimeout(timer);
     }

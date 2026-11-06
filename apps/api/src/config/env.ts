@@ -22,11 +22,11 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
 
   // --- Phase 2A: multi-source integration configuration ----------------
-  // Optional Firecrawl integration for authorized website sources.
+  // Optional Firecrawl integration for authorized website sources and X public search.
   FIRECRAWL_ENABLED: z
     .string()
     .optional()
-    .transform((val) => val === "true"),
+    .transform((val) => val === "true" || (!val && Boolean(process.env.FIRECRAWL_API_KEY))),
   FIRECRAWL_API_KEY: z.string().optional(),
   FIRECRAWL_MAX_PAGES_PER_RUN: z
     .string()

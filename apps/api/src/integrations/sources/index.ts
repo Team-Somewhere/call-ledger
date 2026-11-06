@@ -45,7 +45,13 @@ export function createAdapterRegistry(
   );
 
   const registry = new Map<CreatorSourceType, CreatorSourceAdapter>([
-    ["X", new XAdapter({ ingestionEnabled: options.xIngestionEnabled })],
+    [
+      "X",
+      new XAdapter({
+        ingestionEnabled: options.xIngestionEnabled,
+        firecrawl,
+      }),
+    ],
     [
       "BLUESKY",
       new BlueskyAdapter({
