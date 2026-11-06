@@ -16,10 +16,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="bg-[#FFFAF3] text-[#171717] antialiased min-h-screen flex flex-col font-sans selection:bg-[#FFE5BF] selection:text-[#171717]">
+      <body className="bg-[#FFFAF3] text-[#171717] antialiased min-h-screen w-full overflow-x-hidden flex flex-col font-sans selection:bg-[#FFE5BF] selection:text-[#171717]">
         <Topbar />
         <MockBanner />
-        <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <main className="flex-1 min-w-0 w-full max-w-[918px] mx-auto px-4 md:px-0 pt-7 pb-10">
           {children}
         </main>
       </body>

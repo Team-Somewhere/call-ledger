@@ -6,11 +6,8 @@ import { useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   Globe,
-  Hash,
   Loader2,
-  MessagesSquare,
   Plus,
-  Radio,
   ShieldCheck,
   UserPlus,
 } from "lucide-react";
@@ -25,29 +22,34 @@ type SourceKind = "X" | "BLUESKY" | "RSS" | "WEBSITE";
 
 const SOURCE_META: Record<
   SourceKind,
-  { label: string; hint: string; Icon: React.ComponentType<{ className?: string }> }
+  { label: string; hint: string; glyph: string }
 > = {
   X: {
     label: "X (Twitter)",
     hint: "Username only — no X API key required to add. Live monitoring awaits authorized access.",
-    Icon: Hash,
+    glyph: "#",
   },
   BLUESKY: {
     label: "Bluesky",
     hint: "Public profile handle. We resolve the DID and store it as the stable identity — no API key or password needed.",
-    Icon: MessagesSquare,
+    glyph: "\u25A7",
   },
   RSS: {
     label: "RSS / Atom feed",
     hint: "A feed URL. We validate it, extract the title, and mark it ready for monitoring.",
-    Icon: Radio,
+    glyph: "\u25C9",
   },
   WEBSITE: {
     label: "Authorized website",
     hint: "Only when you are authorized to crawl the site. Requires a configured Firecrawl provider.",
-    Icon: Globe,
+    glyph: "\u25CE",
   },
 };
+
+function creatorHandle(creator: CreatorListItem): string | null {
+  const source = creator.sources.find((s) => s.handle);
+  return source?.handle ? `@${source.handle}` : null;
+}
 
 function DiscoverContent() {
   const searchParams = useSearchParams();
@@ -157,6 +159,13 @@ function DiscoverContent() {
     setPreview(null);
     setAddedCreatorId(null);
 
+    if (sourceKind === "X" && /t\.me\/|telegram/i.test(input)) {
+      setFormError(
+        "Telegram channels are not supported. CallLedger monitors X accounts only. Enter the trader's X handle instead.",
+      );
+      return;
+    }
+
     const needsAuthConfirmation =
       sourceKind === "WEBSITE" && !websiteAuthorized;
     if (needsAuthConfirmation) {
@@ -219,17 +228,17 @@ function DiscoverContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto font-mono">
+    <div className="space-y-5 font-mono min-w-0 w-full overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-4 min-w-0">
+        <div className="space-y-1.5 min-w-0 w-full sm:w-auto">
           <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
             // CREATOR DISCOVERY & DIRECTORY
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#171717]">
+          <h1 className="text-[28px] leading-tight font-bold tracking-tight text-[#171717]">
             Discover Creators
           </h1>
-          <p className="text-xs text-[#78716C] font-sans max-w-xl">
+          <p className="text-[11px] leading-relaxed text-[#78716C] font-sans max-w-[520px] break-words">
             Add traders by X username, Bluesky handle, RSS feed, or an authorized
             website. One creator can own multiple source identities — profiles are
             never auto-merged.
@@ -260,32 +269,33 @@ function DiscoverContent() {
       </div>
 
       {/* Banner */}
-      <div className="w-full bg-[#171717] text-[#FFFAF3] p-4 rounded-sm text-xs">
-        <div className="text-[10px] text-[#FFE5BF] uppercase tracking-wider font-bold">
+      <div className="w-full min-h-[60px] bg-[#171717] text-[#FFFAF3] px-4 py-3 rounded-[3px] flex flex-col justify-center">
+        <div className="text-[10px] text-[#F5B94E] uppercase tracking-wider font-bold">
           /// MULTI-SOURCE CREATOR ARCHITECTURE
         </div>
-        <div className="text-xs text-slate-300 font-sans mt-1">
-          Following a creator is an <strong>off-chain</strong> database
-          operation — no blockchain transaction, and no X follow is ever
-          performed on your behalf.
+        <div className="text-[11px] leading-relaxed text-[#D6D3CD] font-sans mt-1">
+          <strong className="text-[#FFFAF3] font-semibold">
+            Following a creator is an off-chain database operation
+          </strong>{" "}
+          — no blockchain transaction, and no X follow is ever performed on your
+          behalf.
         </div>
       </div>
 
       {/* Add creator form */}
-      <div className="border border-[#E8DFD1] rounded-sm bg-[#FFFAF3]">
+      <div className="border border-[#E8DFD1] rounded-[3px] bg-[#FFFCF7]">
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#E8DFD1]">
-          <div className="text-xs font-bold uppercase tracking-wider text-[#171717]">
-            // Add a creator
+          <div className="text-[11px] font-bold uppercase tracking-wider text-[#171717]">
+            // ADD A CREATOR
           </div>
           <Plus className="w-4 h-4 text-[#78716C]" />
         </div>
 
         <div className="p-4 space-y-4">
           {/* Source selector */}
-          <div className="flex flex-wrap gap-1.5">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
             {(Object.keys(SOURCE_META) as SourceKind[]).map((kind) => {
               const meta = SOURCE_META[kind];
-              const Icon = meta.Icon;
               return (
                 <button
                   key={kind}
@@ -295,13 +305,13 @@ function DiscoverContent() {
                     setFormError(null);
                   }}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs border transition",
+                    "flex min-w-0 items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-[3px] text-[11px] border transition text-left",
                     sourceKind === kind
                       ? "bg-[#171717] text-[#FFFAF3] border-[#171717] font-semibold"
                       : "border-[#E8DFD1] text-[#78716C] hover:text-[#171717] bg-[#FFF2DB]/40",
                   )}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <span aria-hidden className="w-3 text-center">{meta.glyph}</span>
                   {meta.label}
                 </button>
               );
@@ -315,10 +325,10 @@ function DiscoverContent() {
           {/* Input */}
           <div>
             <label className="text-[10px] text-[#78716C] uppercase">
-              {sourceKind === "X" && "X username (without @)"}
-              {sourceKind === "BLUESKY" && "Bluesky handle"}
-              {sourceKind === "RSS" && "Feed URL"}
-              {sourceKind === "WEBSITE" && "Website URL"}
+              {sourceKind === "X" && "X USERNAME (WITHOUT @)"}
+              {sourceKind === "BLUESKY" && "BLUESKY HANDLE"}
+              {sourceKind === "RSS" && "FEED URL"}
+              {sourceKind === "WEBSITE" && "WEBSITE URL"}
             </label>
             <div className="flex gap-2 mt-1">
               <div className="relative flex-1">
@@ -332,7 +342,7 @@ function DiscoverContent() {
                   required
                   placeholder={
                     sourceKind === "X"
-                      ? "tradername"
+                      ? "DrProfitCrypto"
                       : sourceKind === "BLUESKY"
                         ? "trader.bsky.social"
                         : sourceKind === "RSS"
@@ -343,7 +353,7 @@ function DiscoverContent() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void resolve()}
                   className={cn(
-                    "w-full bg-[#FFFAF3] border border-[#E8DFD1] rounded-sm py-1.5 pr-3 text-xs text-[#171717] focus:outline-none focus:border-[#171717]",
+                    "w-full h-[27px] bg-[#FFFAF3] border border-[#171717]/70 rounded-[3px] py-1 pr-3 text-[11px] text-[#171717] focus:outline-none focus:border-[#171717]",
                     (sourceKind === "X" || sourceKind === "BLUESKY") &&
                       "pl-7",
                   )}
@@ -352,7 +362,7 @@ function DiscoverContent() {
               <button
                 onClick={() => void resolve()}
                 disabled={isResolving}
-                className="px-4 py-1.5 bg-[#171717] hover:bg-black text-[#FFFAF3] text-xs font-bold rounded-sm transition disabled:opacity-50 flex items-center gap-1.5"
+                className="h-[27px] px-4 bg-[#171717] hover:bg-black text-[#FFFAF3] text-[11px] font-bold rounded-[3px] transition disabled:opacity-50 flex items-center gap-1.5"
               >
                 {isResolving ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -390,13 +400,13 @@ function DiscoverContent() {
           )}
 
           {preview && (
-            <div className="border border-[#E8DFD1] rounded-sm bg-[#FFF2DB]/40 p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-bold text-[#171717]">
-                    {preview.displayName ?? preview.handle ?? "Creator"}
+            <div className="border border-[#E8DFD1] rounded-[3px] bg-[#FFF5E6] p-3 space-y-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[12px] font-bold text-[#171717] truncate">
+                    {preview.handle ? `@${preview.handle}` : preview.displayName ?? "Creator"}
                   </div>
-                  <div className="text-[11px] text-[#78716C] break-all">
+                  <div className="text-[10px] text-[#78716C] break-all">
                     {preview.canonicalUrl}
                   </div>
                 </div>
@@ -406,7 +416,7 @@ function DiscoverContent() {
               </div>
 
               {preview.status === "WAITING_FOR_AUTHORIZED_ACCESS" && (
-                <div className="text-[11px] text-[#78716C] font-sans leading-relaxed bg-[#FFE5BF]/50 border border-[#E8DFD1] rounded-sm px-2.5 py-2">
+                <div className="text-[10px] text-[#9B7547] font-sans leading-relaxed bg-[#FFF0D8] border border-[#E8DFD1] rounded-[3px] px-2.5 py-2">
                   WAITING_FOR_AUTHORIZED_ACCESS — the creator is saved in
                   CallLedger, but live X monitoring is not enabled until an
                   authorized X data source is configured.
@@ -431,7 +441,7 @@ function DiscoverContent() {
               <button
                 onClick={() => void addCreator()}
                 disabled={isAdding}
-                className="w-full px-4 py-2 bg-[#171717] hover:bg-black text-[#FFFAF3] text-xs font-bold rounded-sm transition disabled:opacity-50 flex items-center justify-center gap-1.5"
+                className="w-full h-[34px] px-4 bg-[#171717] hover:bg-black text-[#FFFAF3] text-xs font-bold rounded-[3px] transition disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
                 {isAdding ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -453,10 +463,11 @@ function DiscoverContent() {
       </div>
 
       {/* Directory */}
-      <div className="border-y border-[#E8DFD1] divide-y divide-[#E8DFD1]">
-        <div className="py-3 px-1 text-[10px] uppercase text-[#78716C] tracking-widest">
+      <div className="pt-2 border-t border-[#E8DFD1]">
+        <div className="py-3 text-[10px] uppercase text-[#78716C] tracking-widest">
           // CREATOR DIRECTORY
         </div>
+        <div className="border-t border-[#E8DFD1]" />
         {listError && (
           <div className="py-6 text-xs text-[#F62440] px-1">{listError}</div>
         )}
@@ -477,7 +488,7 @@ function DiscoverContent() {
         {creators?.map((creator) => (
           <div
             key={creator.id}
-            className="py-3 px-1 flex items-center justify-between hover:bg-[#FFF2DB]/40 transition group"
+            className="py-3 flex items-center justify-between border-b border-[#E8DFD1] last:border-b-0 hover:bg-[#FFF2DB]/40 transition group"
           >
             <div className="flex items-center gap-3 min-w-0">
               {creator.avatarUrl ? (
@@ -487,16 +498,16 @@ function DiscoverContent() {
                   className="w-9 h-9 rounded-full object-cover border border-[#E8DFD1]"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-[#FFF2DB] border border-[#E8DFD1] flex items-center justify-center text-xs text-[#78716C] font-bold">
-                  {creator.displayName.slice(0, 2).toUpperCase()}
+                <div className="w-9 h-9 rounded-full bg-[#FFF2DB] border border-[#E8DFD1] flex items-center justify-center text-[#78716C] shrink-0">
+                  <span aria-hidden className="text-[11px]">◇</span>
                 </div>
               )}
               <div className="min-w-0">
                 <Link
                   href={`/creators/${creator.id}`}
-                  className="font-bold text-sm text-[#171717] hover:underline truncate"
+                  className="font-bold text-[12px] text-[#171717] hover:underline truncate block"
                 >
-                  {creator.displayName}
+                  {creatorHandle(creator) ?? creator.displayName}
                 </Link>
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   {creator.sources.map((source) => (
@@ -513,7 +524,7 @@ function DiscoverContent() {
             </div>
             <Link
               href={`/creators/${creator.id}`}
-              className="text-xs border border-[#E8DFD1] hover:border-[#171717] px-3 py-1 rounded-sm bg-[#FFFAF3] text-[#171717] transition shrink-0 ml-3"
+              className="text-[10px] border border-[#171717]/80 hover:bg-[#171717] hover:text-[#FFFAF3] px-3 py-1.5 rounded-[3px] bg-[#FFFAF3] text-[#171717] transition shrink-0 ml-3"
             >
               VIEW PROFILE &gt;
             </Link>
