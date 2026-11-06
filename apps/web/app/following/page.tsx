@@ -23,9 +23,6 @@ import {
   sourceDisplayHandle,
 } from "../../components/source-badge";
 import { ToastProvider, useToast } from "../../components/toast";
-import { cn } from "../../lib/utils";
-
-type Filter = "ALL" | "X" | "BLUESKY" | "RSS" | "WEBSITE";
 
 function FollowingContent() {
   const { isAuthenticated, connect, isConnecting, address } = useWalletSession();
@@ -33,7 +30,6 @@ function FollowingContent() {
 
   const [items, setItems] = useState<FollowingItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("ALL");
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -42,8 +38,7 @@ function FollowingContent() {
       return;
     }
     try {
-      const query = filter === "ALL" ? "" : `?sourceType=${filter}`;
-      const { data } = await api.listFollowing(query);
+      const { data } = await api.listFollowing("?sourceType=X");
       setItems(data);
       setError(null);
     } catch (err) {
@@ -53,7 +48,7 @@ function FollowingContent() {
           : "Could not load your following list.",
       );
     }
-  }, [filter, isAuthenticated]);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     void load();
@@ -110,23 +105,6 @@ function FollowingContent() {
           Creators you follow on CallLedger. This is not the same as following
           them on X — CallLedger never performs X follow actions.
         </p>
-      </div>
-
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {(["ALL", "X", "BLUESKY", "RSS", "WEBSITE"] as Filter[]).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setFilter(mode)}
-            className={cn(
-              "px-3 py-1 rounded-full text-xs font-mono transition",
-              filter === mode
-                ? "bg-[#171717] text-[#FFFAF3] font-semibold"
-                : "border border-[#E8DFD1] text-[#78716C] hover:text-[#171717] bg-[#FFFAF3]",
-            )}
-          >
-            {mode}
-          </button>
-        ))}
       </div>
 
       {error && (
@@ -203,26 +181,28 @@ function FollowingContent() {
           </div>
 
           <div className="space-y-2">
-            {item.creator.sources.map((source) => (
-              <div
-                key={source.id}
-                className="flex items-center justify-between gap-2 border-t border-[#E8DFD1] pt-2"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <SourceBadge sourceType={source.sourceType} />
-                  <a
-                    href={source.canonicalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-[#78716C] hover:text-[#171717] truncate flex items-center gap-1"
-                  >
-                    {sourceDisplayHandle(source)}
-                    <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                  </a>
+            {item.creator.sources
+              .filter((source) => source.sourceType === "X")
+              .map((source) => (
+                <div
+                  key={source.id}
+                  className="flex items-center justify-between gap-2 border-t border-[#E8DFD1] pt-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <SourceBadge sourceType={source.sourceType} />
+                    <a
+                      href={source.canonicalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-[#78716C] hover:text-[#171717] truncate flex items-center gap-1"
+                    >
+                      {sourceDisplayHandle(source)}
+                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                    </a>
+                  </div>
+                  <MonitoringStatusBadge status={source.status} />
                 </div>
-                <MonitoringStatusBadge status={source.status} />
-              </div>
-            ))}
+              ))}
 
             {item.creator.sources.some(
               (s) => s.status === "WAITING_FOR_AUTHORIZED_ACCESS",
