@@ -50,6 +50,11 @@ const envSchema = z.object({
   ARKIV_ACCESS_KEY: z.string().optional(),
   ARKIV_RPC_URL: z.string().optional(),
 
+  // --- Definitive Flash integration ---
+  DEFINITIVE_API_KEY: z.string().optional(),
+  DEFINITIVE_BASE_URL: z.string().optional(),
+  DEFINITIVE_INTEGRATOR_FEE_BPS: z.string().optional(),
+
   // Worker status endpoint (used by monitoring/status to reach the worker)
   WORKER_STATUS_URL: z.string().optional().default("http://localhost:8001/status"),
 

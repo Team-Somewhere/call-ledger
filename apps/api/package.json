@@ -12,11 +12,12 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --import ./src/tests/setup-env.ts --test src/tests/*.test.ts",
-    "test:unit": "node --import tsx --test src/tests/wallet-auth.test.ts src/tests/source-adapters.test.ts src/tests/crypto.test.ts src/tests/qualification.test.ts src/tests/x-client.test.ts"
+    "test:unit": "node --import tsx --test src/tests/order-flow.test.ts src/tests/wallet-auth.test.ts src/tests/crypto.test.ts src/tests/qualification.test.ts src/tests/x-client.test.ts"
   },
   "dependencies": {
     "@call-ledger/arkiv": "*",
     "@call-ledger/database": "*",
+    "@call-ledger/definitive": "*",
     "@call-ledger/shared": "*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
