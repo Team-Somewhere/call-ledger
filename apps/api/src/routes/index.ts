@@ -7,6 +7,7 @@ import { creatorSourceRouter, meRouter } from "./creator-source.routes";
 import { healthRouter } from "./health.routes";
 import { monitoringRouter } from "./monitoring.routes";
 import { oauthRouter } from "./oauth.routes";
+import { orderRouter } from "./order.routes";
 import { postRouter } from "./post.routes";
 import { userRouter } from "./user.routes";
 
@@ -14,6 +15,7 @@ export const apiRouter = Router();
 
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
+apiRouter.use("/orders", orderRouter);
 apiRouter.use("/users", userRouter);
 apiRouter.use("/me", meRouter);
 apiRouter.use("/creators", creatorRouter);
