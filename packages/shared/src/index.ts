@@ -11,6 +11,8 @@ export * from "./types/order";
 export * from "./types/position";
 export * from "./types/arkiv";
 export * from "./types/api";
+export * from "./types/monitoring";
+export * from "./types/source";
 
 // Schemas
 export * from "./schemas/common.schema";
@@ -19,3 +21,5 @@ export * from "./schemas/creator.schema";
 export * from "./schemas/signal.schema";
 export * from "./schemas/strategy.schema";
 export * from "./schemas/order.schema";
+export * from "./schemas/source.schema";
+export * from "./schemas/wallet-auth.schema";
