@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { type Express } from "express";
 import { env } from "./config/env";
+import { attachAuth } from "./middleware/auth";
 import { errorHandler } from "./middleware/error-handler";
 import { notFoundHandler } from "./middleware/not-found";
 import { requestLogger } from "./middleware/request-logger";
@@ -21,6 +22,9 @@ export function createApp(): Express {
 
   // Logging
   app.use(requestLogger);
+
+  // Wallet session resolution (never rejects — requireAuth does that per route)
+  app.use(attachAuth);
 
   // Main API router
   app.use("/api", apiRouter);
