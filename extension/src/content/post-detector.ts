@@ -22,6 +22,10 @@ const STATUS_RE = /^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/;
 
 export function findPostArticles(root: ParentNode): HTMLElement[] {
   const found = new Set<HTMLElement>();
+  if (root instanceof HTMLElement) {
+    const parentArt = root.closest<HTMLElement>("article");
+    if (parentArt) found.add(parentArt);
+  }
   // Primary: X timeline/post articles. Fallback: any article with a status link.
   root.querySelectorAll<HTMLElement>('article[data-testid="tweet"], article[role="article"]').forEach((el) => found.add(el));
   if (found.size === 0) {

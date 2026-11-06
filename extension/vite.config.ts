@@ -28,10 +28,16 @@ function copyStatic(): Plugin {
   };
 }
 
+const defineEnv = {
+  "process.env.NODE_ENV": JSON.stringify("production"),
+  "process.env": "{}",
+};
+
 export default defineConfig(({ mode }): UserConfig => {
   // Second pass: content script and service worker, each as a single file.
   if (mode === "scripts") {
     return {
+      define: defineEnv,
       publicDir: false,
       build: {
         outDir: "dist",
@@ -51,6 +57,7 @@ export default defineConfig(({ mode }): UserConfig => {
 
   if (mode === "worker") {
     return {
+      define: defineEnv,
       publicDir: false,
       build: {
         outDir: "dist",
@@ -68,6 +75,7 @@ export default defineConfig(({ mode }): UserConfig => {
   }
 
   return {
+    define: defineEnv,
     base: "./",
     plugins: [react(), copyStatic()],
     publicDir: false,

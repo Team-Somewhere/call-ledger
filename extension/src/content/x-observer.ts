@@ -49,6 +49,7 @@ export function observeX(onPostsAdded: PostsHandler): ObserverHandle {
     }
   };
   const navTimer = window.setInterval(onNav, 800);
+  const pollTimer = window.setInterval(() => schedule(document.body), 1500);
   window.addEventListener("popstate", onNav);
 
   // Process whatever is already on the page at start-up.
@@ -58,6 +59,7 @@ export function observeX(onPostsAdded: PostsHandler): ObserverHandle {
     stop() {
       mo.disconnect();
       window.clearInterval(navTimer);
+      window.clearInterval(pollTimer);
       window.removeEventListener("popstate", onNav);
       pendingRoots.clear();
     },
