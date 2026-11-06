@@ -10,6 +10,8 @@
     "https://x.com/*",
     "https://api.dexscreener.com/*",
     "https://api.geckoterminal.com/*",
+    "https://api.coingecko.com/*",
+    "https://coin-images.coingecko.com/*",
     "https://open.er-api.com/*",
     "http://localhost:8000/*"
   ],

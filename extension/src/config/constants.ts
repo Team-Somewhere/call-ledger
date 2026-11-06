@@ -38,9 +38,11 @@ export const REQUEST_TIMEOUT_MS = 12_000;
 /** Trading filter: minimum score a post needs before it is treated as a trade instruction. */
 export const TRADE_SIGNAL_MIN_SCORE = 4;
 
-export type ChartRange = "1W" | "1M" | "1Y";
+export type ChartRange = "1D" | "1W" | "1M" | "1Y" | "ALL";
 export const CHART_RANGES: Record<ChartRange, { days: number; label: string }> = {
+  "1D": { days: 1, label: "1D" },
   "1W": { days: 7, label: "1W" },
   "1M": { days: 30, label: "1M" },
   "1Y": { days: 365, label: "1Y" },
+  "ALL": { days: 1000, label: "ALL" },
 };
