@@ -1,0 +1,22 @@
+/* Popup and side panel styles. Dark theme with CallLedger amber accent. */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #0b0c0f; color: #e5e7eb; font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.pp { width: 320px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.pp__head { display: flex; justify-content: space-between; align-items: center; }
+.pp__brand { display: flex; align-items: center; gap: 6px; }
+.pp__mark { background: #f5b94e; color: #111; font-weight: 800; font-size: 11px; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.04em; }
+.pp__name { font-weight: 700; letter-spacing: 0.02em; }
+.pp__tag { color: #9ca3af; font-size: 11px; }
+.pp__card { background: #13151a; border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px; }
+.pp__row { display: flex; justify-content: space-between; align-items: center; }
+.pp__h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; margin: 0 0 8px; color: #fff; }
+.pp__muted { color: #9ca3af; margin: 6px 0 0; }
+.pp__small { font-size: 11px; }
+.pp__pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); color: #9ca3af; }
+.pp__pill--ok { border-color: #34d399; color: #34d399; }
+.pp__seg { display: inline-flex; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; overflow: hidden; }
+.pp__seg-btn { font: inherit; font-size: 12px; font-weight: 600; background: transparent; color: #9ca3af; border: 0; padding: 6px 14px; cursor: pointer; }
+.pp__seg-btn--on { background: #f5b94e; color: #111; }
+.pp__seg-btn:focus-visible, .pp__link:focus-visible { outline: 2px solid #f5b94e; outline-offset: 2px; }
+.pp__link { display: inline-flex; align-items: center; gap: 6px; justify-content: center; color: #111; background: #f5b94e; font-weight: 700; text-decoration: none; padding: 9px; border-radius: 8px; }

@@ -1,0 +1,275 @@
+/* CallLedger X overlay. All classes are prefixed `cl-` and the root resets inherited X styles. */
+
+.cl-root {
+  all: initial;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #e5e7eb;
+  box-sizing: border-box;
+}
+.cl-root *,
+.cl-root *::before,
+.cl-root *::after {
+  box-sizing: border-box;
+}
+
+.cl-postbar {
+  margin-top: 8px;
+  padding: 8px 0 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: block;
+}
+.cl-postbar__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.cl-postbar__panel {
+  margin-top: 8px;
+  background: #0f1115;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.cl-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  background: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #fffaf3;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.cl-brand__tag {
+  background: #f62440;
+  color: #ffffff;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+}
+.cl-brand__name {
+  color: #fffaf3;
+}
+
+.cl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid rgba(245, 185, 78, 0.45);
+  background: rgba(245, 185, 78, 0.08);
+  color: #f5b94e;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.cl-btn--active {
+  background: rgba(245, 185, 78, 0.22);
+  border-color: #f5b94e;
+  box-shadow: 0 0 10px rgba(245, 185, 78, 0.25);
+}
+.cl-btn:hover {
+  background: rgba(245, 185, 78, 0.28);
+}
+.cl-btn:focus-visible,
+.cl-chip:focus-visible,
+.cl-range__btn:focus-visible {
+  outline: 2px solid #f5b94e;
+  outline-offset: 2px;
+}
+
+.cl-chip {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #15171c;
+  color: #e5e7eb;
+  cursor: pointer;
+}
+.cl-chip:hover {
+  border-color: #f5b94e;
+}
+
+.cl-token {
+  position: relative;
+  display: inline-block;
+}
+.cl-card {
+  position: absolute;
+  z-index: 2147483647;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: #0f1115;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+}
+
+.cl-token-card__head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.cl-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex: none;
+  object-fit: cover;
+}
+.cl-logo--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #1f2330;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f5b94e;
+}
+.cl-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.cl-price {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+}
+.cl-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.cl-stats div {
+  background: #15171c;
+  border-radius: 8px;
+  padding: 6px;
+}
+.cl-stats dt {
+  font-size: 10px;
+  color: #9ca3af;
+}
+.cl-stats dd {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+.cl-range {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.cl-range__btn {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+}
+.cl-range__btn--on {
+  background: #f5b94e;
+  color: #111;
+  border-color: #f5b94e;
+  font-weight: 700;
+}
+.cl-chart {
+  width: 100%;
+  height: 120px;
+}
+.cl-chart-state {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.cl-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+.cl-kv__label {
+  color: #9ca3af;
+}
+.cl-kv__value {
+  font-weight: 600;
+  color: #fff;
+}
+.cl-kv__unknown {
+  color: #6b7280;
+  font-style: italic;
+}
+.cl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+.cl-strategy__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.cl-warnings {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  color: #fbbf24;
+  font-size: 12px;
+}
+.cl-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.cl-list__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.cl-muted { color: #9ca3af; }
+.cl-small { font-size: 11px; }
+.cl-strong { font-weight: 700; color: #fff; }
+.cl-error { color: #f87171; }
+.cl-up { color: #34d399; font-weight: 600; }
+.cl-down { color: #f87171; font-weight: 600; }
+
+@media (max-width: 480px) {
+  .cl-card { width: calc(100vw - 32px); }
+  .cl-grid { grid-template-columns: 1fr; }
+  .cl-stats { grid-template-columns: repeat(2, 1fr); }
+}
