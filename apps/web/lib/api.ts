@@ -303,7 +303,45 @@ export const api = {
     apiFetch<{ order: Order; flashStatus?: FlashOrderStatusResponse }>(`/orders/${orderId}`),
 
   getOrders: () => apiFetch<Order[]>("/orders"),
+
+  getWalletBalances: async (address: string): Promise<WalletBalancesResponse> => {
+    const res = await fetch(`/api/wallet/balances?address=${encodeURIComponent(address)}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch wallet balances: HTTP ${res.status}`);
+    }
+    return (await res.json()) as WalletBalancesResponse;
+  },
 };
+
+export interface WalletTokenBalance {
+  symbol: string;
+  name: string;
+  chain: string;
+  chainId: number;
+  amount: number;
+  amountFormatted: string;
+  priceUsd: number;
+  valueUsd: number;
+  valueUsdFormatted: string;
+  tokenAddress?: string;
+  explorerUrl: string;
+}
+
+export interface WalletBalancesResponse {
+  address: string;
+  ethPriceUsd: number;
+  totalUsd: number;
+  totalUsdFormatted: string;
+  tokens: WalletTokenBalance[];
+  allTrackedTokens: WalletTokenBalance[];
+  chainBreakdown: {
+    chain: string;
+    chainId: number;
+    valueUsd: number;
+    percentage: number;
+  }[];
+  updatedAt: string;
+}
 
 export interface SourceSummary {
   id: string;
