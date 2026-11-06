@@ -7,6 +7,7 @@ import {
   Activity,
   Award,
   Compass,
+  Gauge,
   Layers,
   LayoutDashboard,
   PieChart,
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/strategies", label: "My Strategies", icon: Layers },
   { href: "/portfolio", label: "Portfolio", icon: PieChart },
   { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/monitoring", label: "Monitoring", icon: Gauge },
 ];
 
 export function Sidebar() {
