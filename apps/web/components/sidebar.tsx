@@ -13,11 +13,13 @@ import {
   PieChart,
   Radio,
   ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/trade", label: "Flash Trading", icon: Zap },
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/creators", label: "Creators", icon: Award },
   { href: "/signals", label: "Signals", icon: Radio },

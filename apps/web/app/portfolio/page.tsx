@@ -1,13 +1,43 @@
 "use client";
 
-import React, { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
+import { ExternalLink, RotateCcw, Zap } from "lucide-react";
 import { DataTable } from "../../components/data-table";
 import { PerformanceChart } from "../../components/performance-chart";
 import { MOCK_ORDERS, MOCK_POSITIONS } from "../../lib/mock-data";
+import { api } from "../../lib/api";
+import { useWalletSession } from "../../lib/use-wallet-session";
+import { VERIFIED_CHAINS, type Order } from "@call-ledger/shared";
 
 export default function PortfolioPage() {
   const [positions, setPositions] = useState(MOCK_POSITIONS);
+  const [realOrders, setRealOrders] = useState<Order[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const wallet = useWalletSession();
+
+  const fetchOrders = () => {
+    if (!wallet.address) {
+      setRealOrders([]);
+      return;
+    }
+    setIsLoadingOrders(true);
+    api
+      .getOrders()
+      .then((res) => {
+        setRealOrders(res.data);
+      })
+      .catch((err) => {
+        console.warn("Could not load user orders:", err);
+      })
+      .finally(() => {
+        setIsLoadingOrders(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchOrders();
+  }, [wallet.address]);
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto font-mono">
@@ -161,45 +191,113 @@ export default function PortfolioPage() {
 
       {/* Definitive Execution Log */}
       <div className="space-y-2 pt-2">
-        <div className="text-[10px] uppercase text-[#78716C] tracking-wider">
-          // DEFINITIVE ORDER LEDGER
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase text-[#78716C] tracking-wider flex items-center gap-1.5">
+            <Zap className="w-3 h-3 text-[#16A34A]" />
+            // DEFINITIVE FLASH ORDER LEDGER {realOrders.length > 0 ? `(${realOrders.length} LIVE)` : "(PREVIEW)"}
+          </div>
+          <Link
+            href="/trade"
+            className="text-[10px] font-bold text-[#16A34A] hover:underline flex items-center gap-1"
+          >
+            <span>NEW FLASH TRADE</span>
+            <ExternalLink className="w-2.5 h-2.5" />
+          </Link>
         </div>
-        <DataTable
-          columns={[
-            { header: "TIME", cell: (row) => row.timestamp },
-            {
-              header: "MARKET",
-              cell: (row) => <span className="font-bold">{row.assetPair}</span>,
-            },
-            {
-              header: "SIDE",
-              cell: (row) => (
-                <span
-                  className={`font-bold ${row.direction === "BUY" ? "text-[#16A34A]" : "text-[#F62440]"}`}
-                >
-                  {row.direction}
-                </span>
-              ),
-            },
-            { header: "ROUTING", cell: (row) => row.provider },
-            { header: "INPUT", cell: (row) => row.inputAmount },
-            {
-              header: "OUTPUT",
-              cell: (row) => (
-                <span className="text-[#16A34A]">{row.outputAmount}</span>
-              ),
-            },
-            {
-              header: "STATE",
-              cell: (row) => (
-                <span className="px-1.5 py-0.5 rounded-sm bg-[#171717] text-[#FFFAF3] text-[9px] uppercase">
-                  {row.status}
-                </span>
-              ),
-            },
-          ]}
-          data={MOCK_ORDERS}
-        />
+
+        {realOrders.length > 0 ? (
+          <DataTable
+            columns={[
+              {
+                header: "TIME",
+                cell: (row) => new Date(row.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              },
+              {
+                header: "CHAIN",
+                cell: (row) => <span className="font-bold uppercase text-[10px]">{row.chainId}</span>,
+              },
+              {
+                header: "ORDER TYPE",
+                cell: (row) => <span className="font-bold">{row.orderType}</span>,
+              },
+              {
+                header: "INPUT AMOUNT",
+                cell: (row) => row.inputAmount,
+              },
+              {
+                header: "OUTPUT AMOUNT",
+                cell: (row) => (
+                  <span className="text-[#16A34A]">{row.outputAmount || "Pending fill"}</span>
+                ),
+              },
+              {
+                header: "STATUS",
+                cell: (row) => (
+                  <span className="px-1.5 py-0.5 rounded-sm bg-[#171717] text-[#FFFAF3] text-[9px] uppercase font-bold">
+                    {row.status}
+                  </span>
+                ),
+              },
+              {
+                header: "PROOF / TX",
+                cell: (row) => {
+                  const explorer = VERIFIED_CHAINS[row.chainId]?.explorerBaseUrl || "https://basescan.org";
+                  return row.transactionHash ? (
+                    <a
+                      href={`${explorer}/tx/${row.transactionHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#16A34A] hover:underline text-[10px] flex items-center gap-0.5"
+                    >
+                      {row.transactionHash.slice(0, 6)}...{row.transactionHash.slice(-4)}
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  ) : (
+                    <span className="text-[#78716C] text-[10px]">Awaiting settlement</span>
+                  );
+                },
+              },
+            ]}
+            data={realOrders}
+          />
+        ) : (
+          <DataTable
+            columns={[
+              { header: "TIME", cell: (row) => row.timestamp },
+              {
+                header: "MARKET",
+                cell: (row) => <span className="font-bold">{row.assetPair}</span>,
+              },
+              {
+                header: "SIDE",
+                cell: (row) => (
+                  <span
+                    className={`font-bold ${row.direction === "BUY" ? "text-[#16A34A]" : "text-[#F62440]"}`}
+                  >
+                    {row.direction}
+                  </span>
+                ),
+              },
+              { header: "ROUTING", cell: (row) => row.provider },
+              { header: "INPUT", cell: (row) => row.inputAmount },
+              {
+                header: "OUTPUT",
+                cell: (row) => (
+                  <span className="text-[#16A34A]">{row.outputAmount}</span>
+                ),
+              },
+              {
+                header: "STATE",
+                cell: (row) => (
+                  <span className="px-1.5 py-0.5 rounded-sm bg-[#171717] text-[#FFFAF3] text-[9px] uppercase">
+                    {row.status}
+                  </span>
+                ),
+              },
+            ]}
+            data={MOCK_ORDERS}
+          />
+        )}
       </div>
     </div>
   );

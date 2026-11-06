@@ -4,6 +4,48 @@ import type { DetectedPost } from "../content/post-detector";
 import { parseStrategy } from "../features/strategy/strategy-parser";
 import type { Field, StrategyDraft } from "../features/strategy/strategy-types";
 import { cleanPostText } from "../utils/sanitization";
+import { CALLLEDGER_APP_URL } from "../config/constants";
+
+function buildTradeHandoffUrl(post: DetectedPost, draft: StrategyDraft, _isComplete: boolean): string {
+  const primarySymbol = draft.assets[0]?.status === "known" ? draft.assets[0].value : "WETH";
+  const chain = draft.chain.status === "known" ? draft.chain.value : "base";
+  const direction =
+    draft.direction.status === "known"
+      ? draft.direction.value === "short"
+        ? "sell"
+        : "buy"
+      : "buy";
+  const orderType =
+    draft.orderType.status === "known" && draft.orderType.value === "market"
+      ? "market"
+      : "limit";
+
+  const handoffPayload = {
+    sourcePost: {
+      id: post.postId ?? undefined,
+      url: post.postUrl ?? undefined,
+      author: post.authorHandle ?? undefined,
+      text: post.text,
+    },
+    chain,
+    targetSymbol: primarySymbol,
+    contraSymbol: "USDC",
+    direction,
+    orderType,
+    limitPrice: draft.entryPrice.status === "known" ? draft.entryPrice.value : undefined,
+    stopLoss: draft.stopLoss.status === "known" ? draft.stopLoss.value : undefined,
+    takeProfit: draft.takeProfit.status === "known" ? draft.takeProfit.value : undefined,
+    suggestedQty:
+      draft.positionSize.status === "known" && draft.positionSize.value.unit === "usd"
+        ? String(draft.positionSize.value.amount)
+        : undefined,
+    confidence: draft.confidence,
+    classification: draft.classification,
+  };
+
+  const serialized = encodeURIComponent(JSON.stringify(handoffPayload));
+  return `${CALLLEDGER_APP_URL}/trade?draft=${serialized}`;
+}
 
 /**
  * Strategy Action Button & Panel:
@@ -56,7 +98,6 @@ export function AnalyzeStrategyButton({
 AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({ post }: { post: DetectedPost }) {
   const draft: StrategyDraft = useMemo(() => parseStrategy(cleanPostText(post.text)), [post.text]);
   const isComplete = draft.classification === "trading_instruction";
-  const primarySymbol = draft.assets[0]?.status === "known" ? draft.assets[0].value : "";
 
   return (
     <div className="cl-strategy">
@@ -97,23 +138,23 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({ post }: { post: D
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
         {isComplete ? (
           <a
-            href={`http://localhost:3000/strategies?token=${primarySymbol}&action=copy`}
+            href={buildTradeHandoffUrl(post, draft, true)}
             target="_blank"
             rel="noreferrer"
             className="cl-btn cl-btn--active"
             style={{ textDecoration: "none", padding: "6px 14px", fontWeight: 700 }}
           >
-            ⚡ Copy Strategy to CallLedger ↗
+            ⚡ Review & Copy Strategy on CallLedger ↗
           </a>
         ) : (
           <a
-            href={`http://localhost:3000/strategies?token=${primarySymbol}&action=analyze`}
+            href={buildTradeHandoffUrl(post, draft, false)}
             target="_blank"
             rel="noreferrer"
             className="cl-btn"
             style={{ textDecoration: "none", padding: "6px 14px", fontWeight: 700, borderColor: "rgba(245, 185, 78, 0.7)" }}
           >
-            🤖 Analyze Post & Image with AI ↗
+            ✨ Review & Build Strategy on CallLedger ↗
           </a>
         )}
       </div>
