@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { MockBanner } from "../components/mock-banner";
 import { Topbar } from "../components/topbar";
 
 export const metadata: Metadata = {
@@ -18,8 +17,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-[#FFFAF3] text-[#171717] antialiased min-h-screen w-full overflow-x-hidden flex flex-col font-sans selection:bg-[#FFE5BF] selection:text-[#171717]">
         <Topbar />
-        <MockBanner />
-        <main className="flex-1 min-w-0 w-full max-w-[918px] mx-auto px-4 md:px-0 pt-7 pb-10">
+        <main className="flex-1 min-w-0 w-full max-w-[1680px] mx-auto px-4 md:px-[3vw] pt-7 pb-10">
           {children}
         </main>
       </body>

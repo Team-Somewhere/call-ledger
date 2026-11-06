@@ -223,6 +223,38 @@ export const api = {
       activeSources: number;
       recentArchived: number;
     }>("/archive/status"),
+
+  // --- Phase 3: Arkiv transaction history ---
+  arkivTransactions: (params = "") =>
+    apiFetch<ArkivTransaction[]>(`/arkiv/transactions${params}`),
+
+  arkivLatestTransaction: () =>
+    apiFetch<ArkivTransaction | null>("/arkiv/transactions/latest"),
+
+  // --- Phase 3: Worker monitoring status ---
+  workerStatus: () =>
+    apiFetch<WorkerStatus>("/monitoring/status"),
+
+  monitoringTraders: () =>
+    apiFetch<TraderMonitoringState[]>("/monitoring/traders"),
+
+  patchTraderMonitoring: (traderId: string, enabled: boolean) =>
+    apiFetch<{ traderId: string; enabled: boolean }>(
+      `/monitoring/traders/${traderId}`,
+      { method: "PATCH", body: JSON.stringify({ enabled }) },
+    ),
+
+  monitoringPause: () =>
+    apiFetch<{ paused: boolean }>("/monitoring/pause", { method: "POST" }),
+
+  monitoringResume: () =>
+    apiFetch<{ resumed: boolean }>("/monitoring/resume", { method: "POST" }),
+
+  monitoringRunNow: () =>
+    apiFetch<{ triggered: boolean; sourcesReset: number; message: string }>(
+      "/monitoring/run-now",
+      { method: "POST" },
+    ),
 };
 
 export interface SourceSummary {
@@ -384,4 +416,60 @@ export interface ArchivedPost {
   localTxHash?: string | null;
   creatorDisplayName?: string | null;
   creatorId?: string | null;
+}
+
+// Phase 3: Arkiv transaction history
+export interface ArkivTransaction {
+  id: string;
+  entityKey: string;
+  txHash: string;
+  sourcePostId: string;
+  traderId: string | null;
+  traderUsername: string | null;
+  traderDisplayName: string | null;
+  status: string;
+  submittedAt: string;
+  confirmedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  explorerUrl: string;
+}
+
+// Phase 3: Worker status
+export interface WorkerStatus {
+  reachable: boolean;
+  status: "running" | "stopped" | "unknown";
+  startedAt: string | null;
+  lastCycleAt: string | null;
+  nextCycleAt: string | null;
+  totalCycles: number;
+  lastCycleProcessed: number;
+  intervalMinutes: number;
+  budget: {
+    date: string;
+    usedRequests: number;
+    maxRequests: number;
+    remaining: number;
+  } | null;
+  arkivConfigured: boolean;
+  arkivWriteConfigured: boolean;
+  lastSuccessfulFetch: string | null;
+  totalArchived: number;
+  archivedLast24h: number;
+}
+
+// Phase 3: Per-trader monitoring state
+export interface TraderMonitoringState {
+  traderId: string;
+  traderDisplayName: string;
+  xUsername: string | null;
+  monitoringEnabled: boolean;
+  sourceId: string | null;
+  sourceStatus: string | null;
+  lastFetchedAt: string | null;
+  nextFetchAt: string | null;
+  consecutiveFailures: number;
+  lastError: string | null;
+  postsArchived: number;
+  lastArchivedAt: string | null;
 }

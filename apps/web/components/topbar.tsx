@@ -1,27 +1,259 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertCircle, Check, ChevronDown, Copy, Loader2, LogOut, ShieldCheck, Wallet } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Loader2,
+  LogOut,
+  Shield,
+  ShieldCheck,
+  Wallet,
+  Zap,
+} from "lucide-react";
 import { cn } from "../lib/utils";
 import { useWalletSession } from "../lib/use-wallet-session";
+import { api, type ArkivTransaction } from "../lib/api";
 
 const navLinks = [
   { href: "/", label: "TERMINAL" },
   { href: "/discover", label: "DISCOVER" },
   { href: "/following", label: "FOLLOWING" },
-  { href: "/signals", label: "SIGNALS" },
   { href: "/strategies", label: "ALLOCATIONS" },
   { href: "/portfolio", label: "PORTFOLIO" },
-  { href: "/activity", label: "ACTIVITY" },
-  { href: "/archive", label: "ARCHIVE" },
-  { href: "/monitoring", label: "MONITORING" },
 ];
+
+// ─── Latest Arkiv TX widget ───────────────────────────────────────────────
+
+function ArkivTxWidget() {
+  const [open, setOpen] = useState(false);
+  const [latest, setLatest] = useState<ArkivTransaction | null | undefined>(undefined);
+  const [recent, setRecent] = useState<ArkivTransaction[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [latestRes, recentRes] = await Promise.all([
+        api.arkivLatestTransaction(),
+        api.arkivTransactions("?limit=5"),
+      ]);
+      setLatest(latestRes.data ?? null);
+      setRecent(recentRes.data ?? []);
+    } catch {
+      setLatest(null);
+    }
+  }, []);
+
+  // Load on mount and poll every 30s
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(), 30_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  function copyHash(hash: string) {
+    void navigator.clipboard.writeText(hash);
+    setCopied(hash);
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  const hasLatest = latest !== null && latest !== undefined;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex items-center gap-1.5 border rounded-sm px-2 py-1 text-[10px] font-mono transition",
+          hasLatest
+            ? "border-[#16A34A]/40 bg-[#16A34A]/8 text-[#16A34A] hover:border-[#16A34A]"
+            : "border-[#E8DFD1] bg-[#FFFAF3] text-[#78716C] hover:border-[#171717] hover:text-[#171717]",
+        )}
+        title="Latest Arkiv transaction"
+      >
+        {latest === undefined ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Shield className={cn("w-3 h-3", hasLatest ? "text-[#16A34A]" : "text-[#78716C]")} />
+        )}
+        <span className="uppercase tracking-wider hidden sm:inline">LATEST ARKIV TX</span>
+        {hasLatest && (
+          <span className="font-mono text-[9px] text-[#16A34A] hidden lg:inline">
+            {latest.txHash.slice(0, 8)}…
+          </span>
+        )}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-1.5 w-96 rounded-sm border border-[#E8DFD1] bg-[#FFFAF3] shadow-xl z-50 font-mono text-xs overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[#E8DFD1] bg-[#FFF2DB]/40">
+            <div className="flex items-center gap-1.5">
+              <Shield className="w-3 h-3 text-[#16A34A]" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#171717]">
+                Arkiv Transaction History
+              </span>
+            </div>
+            <span className="text-[9px] text-[#78716C]">RABDI TESTNET</span>
+          </div>
+
+          {/* Latest tx */}
+          {!hasLatest ? (
+            <div className="px-3 py-6 text-center">
+              <Zap className="w-5 h-5 text-[#E8DFD1] mx-auto mb-2" />
+              <div className="text-[11px] font-bold text-[#171717]">No transactions yet</div>
+              <p className="text-[10px] text-[#78716C] mt-1 font-sans">
+                Add a trader and enable monitoring to start archiving to Arkiv.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Latest */}
+              <div className="px-3 py-2.5 bg-[#16A34A]/5 border-b border-[#E8DFD1]">
+                <div className="text-[9px] uppercase text-[#78716C] mb-1.5 tracking-wider">Latest confirmed</div>
+                <TxRow
+                  tx={latest}
+                  copied={copied}
+                  onCopy={copyHash}
+                  highlight
+                />
+              </div>
+
+              {/* Recent list */}
+              {recent.length > 0 && (
+                <div>
+                  <div className="px-3 pt-2 pb-1 text-[9px] uppercase text-[#78716C] tracking-wider">
+                    Recent transactions
+                  </div>
+                  <div className="divide-y divide-[#E8DFD1]/60">
+                    {recent.slice(0, 5).map((tx) => (
+                      <div key={tx.id} className="px-3 py-2">
+                        <TxRow tx={tx} copied={copied} onCopy={copyHash} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Footer */}
+          <div className="border-t border-[#E8DFD1] px-3 py-2 flex items-center justify-between">
+            <Link
+              href="/archive"
+              onClick={() => setOpen(false)}
+              className="text-[10px] text-[#78716C] hover:text-[#171717] transition"
+            >
+              View archive feed →
+            </Link>
+            <Link
+              href="/monitoring"
+              onClick={() => setOpen(false)}
+              className="text-[10px] text-[#78716C] hover:text-[#171717] transition"
+            >
+              Worker status →
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TxRow({
+  tx,
+  copied,
+  onCopy,
+  highlight = false,
+}: {
+  tx: ArkivTransaction;
+  copied: string | null;
+  onCopy: (hash: string) => void;
+  highlight?: boolean;
+}) {
+  const confirmedAt = tx.confirmedAt ? new Date(tx.confirmedAt) : null;
+
+  return (
+    <div className={cn("space-y-1", highlight && "")}>
+      {/* Hash row */}
+      <div className="flex items-center gap-1.5">
+        <span
+          className={cn(
+            "text-[9px] font-bold uppercase px-1 py-px rounded-sm",
+            tx.status === "CONFIRMED"
+              ? "bg-[#16A34A]/10 text-[#16A34A]"
+              : "bg-[#F62440]/10 text-[#F62440]",
+          )}
+        >
+          {tx.status}
+        </span>
+        <code className="text-[10px] font-mono text-[#171717] flex-1 truncate">
+          {tx.txHash.slice(0, 18)}…{tx.txHash.slice(-6)}
+        </code>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() => onCopy(tx.txHash)}
+            title="Copy transaction hash"
+            className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition"
+          >
+            {copied === tx.txHash ? (
+              <Check className="w-3 h-3 text-[#16A34A]" />
+            ) : (
+              <Copy className="w-3 h-3" />
+            )}
+          </button>
+          <a
+            href={tx.explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View on Rabdi explorer"
+            className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition"
+          >
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      </div>
+      {/* Meta row */}
+      <div className="flex items-center gap-3 text-[9px] text-[#78716C]">
+        {tx.traderUsername && (
+          <span>@{tx.traderUsername}</span>
+        )}
+        <span className="font-mono truncate max-w-[120px]">
+          post·{tx.sourcePostId.slice(-8)}
+        </span>
+        {confirmedAt && (
+          <span className="ml-auto">
+            {confirmedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Topbar ──────────────────────────────────────────────────────────
 
 export function Topbar() {
   const pathname = usePathname();
-  const [network, setNetwork] = useState<"TESTNET" | "MAINNET">("TESTNET");
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -83,32 +315,16 @@ export function Topbar() {
         </nav>
       </div>
 
-      {/* Right: Network Segmented Control + Wallet Action */}
+      {/* Right: Arkiv TX + Network badge + Wallet */}
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-        {/* Network Toggle */}
+        {/* Latest Arkiv TX widget */}
+        <ArkivTxWidget />
+
+        {/* Testnet badge */}
         <div className="flex items-center border border-[#E8DFD1] rounded-sm p-0.5 bg-[#FFF2DB]/60 text-[10px] font-mono">
-          <button
-            onClick={() => setNetwork("TESTNET")}
-            className={cn(
-              "px-2 py-0.5 rounded-sm transition uppercase",
-              network === "TESTNET"
-                ? "bg-[#171717] text-[#FFFAF3] font-medium shadow-xs"
-                : "text-[#78716C] hover:text-[#171717]",
-            )}
-          >
+          <span className="px-2 py-0.5 rounded-sm uppercase bg-[#171717] text-[#FFFAF3] font-medium shadow-xs">
             TESTNET
-          </button>
-          <button
-            onClick={() => setNetwork("MAINNET")}
-            className={cn(
-              "px-2 py-0.5 rounded-sm transition uppercase",
-              network === "MAINNET"
-                ? "bg-[#171717] text-[#FFFAF3] font-medium shadow-xs"
-                : "text-[#78716C] hover:text-[#171717]",
-            )}
-          >
-            MAINNET
-          </button>
+          </span>
         </div>
 
         {/* Wallet Section */}
@@ -155,7 +371,7 @@ export function Topbar() {
                 <div className="mt-2 flex items-center justify-between text-[11px] text-[#78716C]">
                   <span>Network</span>
                   <span className="font-medium text-[#171717]">
-                    Arbitrum One ({network})
+                    Rabdi Testnet
                   </span>
                 </div>
 
@@ -207,7 +423,7 @@ export function Topbar() {
         )}
       </div>
 
-      {/* Global Connection Error Banner (if any) */}
+      {/* Global Connection Error Banner */}
       {error && !isAuthenticated && (
         <div className="w-full mt-1.5 flex items-center justify-between gap-2 p-1.5 rounded-sm bg-[#F62440]/10 border border-[#F62440]/30 text-[#F62440] text-[11px] font-mono">
           <div className="flex items-center gap-1.5 truncate">

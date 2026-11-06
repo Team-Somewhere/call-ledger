@@ -109,13 +109,10 @@ export default function TerminalPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Top Search the Terminal Bar */}
-      <div className="flex flex-col items-center max-w-xl mx-auto space-y-1.5 pb-2">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-[#78716C]">
-          // SEARCH THE TERMINAL
-        </span>
-        <div className="relative w-full">
+    <div className="space-y-6 px-2">
+      {/* Top bar: search + testnet badge */}
+      <div className="flex items-center gap-3 max-w-2xl mx-auto">
+        <div className="relative flex-1">
           <Search className="w-4 h-4 text-[#78716C] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -125,12 +122,13 @@ export default function TerminalPage() {
             className="w-full bg-[#FFFAF3] border border-[#E8DFD1] hover:border-[#171717] focus:border-[#171717] rounded-full pl-10 pr-4 py-2 text-xs font-mono text-[#171717] placeholder-[#78716C] shadow-xs focus:outline-none transition"
           />
         </div>
+
       </div>
 
-      {/* 3-Column Terminal Layout inspired by KOLLATERAL */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* 3-Column Terminal Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)] lg:grid-cols-[minmax(190px,0.8fr)_minmax(0,2fr)_minmax(200px,0.9fr)] xl:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(220px,280px)] gap-4 lg:gap-5 items-start">
         {/* Column 1: Left Filter & Terminal Stats (2 cols) */}
-        <div className="lg:col-span-2 space-y-5 font-mono">
+        <div className="min-w-0 space-y-5 font-mono">
           <div>
             <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
               // LIVE FEED
@@ -225,16 +223,10 @@ export default function TerminalPage() {
         </div>
 
         {/* Column 2: Center Live Calls Feed (7 cols) */}
-        <div className="lg:col-span-7 space-y-4 font-mono">
+        <div className="min-w-0 space-y-4 font-mono">
           {/* Feed Header */}
           <div className="flex items-center justify-between pb-2 border-b border-[#E8DFD1] text-xs">
             <div className="flex items-center gap-2">
-              <span className="bg-[#171717] text-[#FFFAF3] px-2 py-0.5 rounded-sm font-bold text-[10px]">
-                0-YAP
-              </span>
-              <span className="text-[11px] text-[#78716C]">
-                POWERED BY ARKIV • STRIP THE NOISE
-              </span>
             </div>
             <span className="text-[11px] text-[#78716C]">
               {useRealFeed
@@ -353,7 +345,7 @@ export default function TerminalPage() {
         </div>
 
         {/* Column 3: Right Side Widgets (3 cols) */}
-        <div className="lg:col-span-3 space-y-5 font-mono">
+        <div className="min-w-0 md:col-span-2 lg:col-span-1 space-y-5 font-mono">
           {/* WHO TO FADE OR FOLLOW */}
           <div className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-3">
             <div className="text-[10px] uppercase text-[#78716C] pb-2 border-b border-[#E8DFD1] tracking-wider">

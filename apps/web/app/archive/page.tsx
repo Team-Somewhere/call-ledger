@@ -5,21 +5,14 @@ import Link from "next/link";
 import {
   AlertCircle,
   Archive,
+  Check,
+  Copy,
   ExternalLink,
   Loader2,
   Shield,
   TrendingUp,
 } from "lucide-react";
 import { api, type ArchivedPost } from "../../lib/api";
-
-/**
- * Arkiv Archive Feed — posts retrieved directly from Arkiv Rabdi.
- *
- * This page demonstrates actual Arkiv reads. Every post shown here
- * was written to the Arkiv Rabdi testnet by the CallLedger monitoring worker.
- * The original X URL may become unavailable without removing content from Arkiv,
- * as long as the entity has not expired.
- */
 
 export default function ArchivePage() {
   const [posts, setPosts] = useState<ArchivedPost[]>([]);
@@ -53,17 +46,14 @@ export default function ArchivePage() {
           source?: string;
         } | undefined;
 
-        if (reset) {
-          setPosts(resp.data);
-        } else {
-          setPosts((prev) => [...prev, ...resp.data]);
-        }
+        if (reset) setPosts(resp.data);
+        else setPosts((prev) => [...prev, ...resp.data]);
+
         setHasMore(Boolean(meta?.hasMore));
         setNextCursor(meta?.nextCursor ?? null);
         setSource(meta?.source ?? "unknown");
       } catch (err: unknown) {
-        const msg =
-          err instanceof Error ? err.message : "Failed to load archive.";
+        const msg = err instanceof Error ? err.message : "Failed to load archive.";
         setError(msg);
         if (reset) setPosts([]);
       } finally {
@@ -71,6 +61,7 @@ export default function ArchivePage() {
         setLoadingMore(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [filterTrading, appliedUsername, nextCursor],
   );
 
@@ -101,9 +92,9 @@ export default function ArchivePage() {
           Archive Feed
         </h1>
         <p className="font-sans text-xs text-[#78716C] mt-1 max-w-lg">
-          X posts permanently archived on Arkiv Rabdi. Reads are served directly
-          from the chain — content remains accessible even if the original post is deleted,
-          as long as the Arkiv entity has not expired.
+          X posts permanently archived on Arkiv Rabdi. Content is served
+          directly from the chain — it remains accessible even if the original
+          post is deleted, as long as the entity has not expired.
         </p>
       </div>
 
@@ -157,7 +148,7 @@ export default function ArchivePage() {
         )}
       </div>
 
-      {/* Error state */}
+      {/* Error */}
       {error && (
         <div className="flex items-center gap-2 border border-[#F62440]/30 bg-[#F62440]/5 p-3 rounded-sm text-xs text-[#F62440]">
           <AlertCircle className="w-4 h-4 shrink-0" />
@@ -167,9 +158,7 @@ export default function ArchivePage() {
             {error.includes("not configured") && (
               <div className="font-sans text-[11px] mt-1 text-[#78716C]">
                 Set{" "}
-                <code className="bg-[#E8DFD1] px-1 rounded-sm">
-                  ARKIV_ACCESS_KEY
-                </code>{" "}
+                <code className="bg-[#E8DFD1] px-1 rounded-sm">ARKIV_ACCESS_KEY</code>{" "}
                 in the API environment to enable archive reads.
               </div>
             )}
@@ -185,20 +174,18 @@ export default function ArchivePage() {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty */}
       {!loading && !error && posts.length === 0 && (
         <div className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-10 text-center">
           <Archive className="w-8 h-8 text-[#78716C] mx-auto mb-3" />
-          <div className="text-sm font-bold text-[#171717]">
-            No archived posts yet
-          </div>
+          <div className="text-sm font-bold text-[#171717]">No archived posts yet</div>
           <p className="font-sans text-xs text-[#78716C] mt-1 max-w-xs mx-auto">
             Add a trader on the{" "}
             <Link href="/discover" className="underline text-[#171717]">
               Discover
             </Link>{" "}
             page. The monitoring worker will archive their X posts to Arkiv
-            automatically.
+            automatically every 15 minutes.
           </p>
         </div>
       )}
@@ -217,9 +204,7 @@ export default function ArchivePage() {
                 disabled={loadingMore}
                 className="inline-flex items-center gap-2 border border-[#E8DFD1] bg-[#FFFAF3] px-4 py-2 text-xs text-[#171717] rounded-sm hover:border-[#171717] disabled:opacity-50 transition"
               >
-                {loadingMore && (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                )}
+                {loadingMore && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Load more
               </button>
             </div>
@@ -227,6 +212,29 @@ export default function ArchivePage() {
         </div>
       )}
     </div>
+  );
+}
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy() {
+    void navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      title={`Copy ${label}`}
+      className="flex items-center gap-1 px-2 py-0.5 rounded-sm border border-[#E8DFD1] hover:border-[#171717] text-[#78716C] hover:text-[#171717] transition text-[9px]"
+    >
+      {copied ? (
+        <Check className="w-2.5 h-2.5 text-[#16A34A]" />
+      ) : (
+        <Copy className="w-2.5 h-2.5" />
+      )}
+      {copied ? "Copied" : label}
+    </button>
   );
 }
 
@@ -241,6 +249,11 @@ function ArchivedPostCard({ post }: { post: ArchivedPost }) {
     ? Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null;
   const expiringSoon = daysUntilExpiry !== null && daysUntilExpiry < 30;
+
+  const txHash = post.txHash ?? post.localTxHash ?? null;
+  const explorerUrl = txHash
+    ? `https://rabdi.explorer.arkiv.network/tx/${txHash}`
+    : null;
 
   return (
     <article className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-4 space-y-3 hover:border-[#171717] transition">
@@ -268,7 +281,11 @@ function ArchivedPostCard({ post }: { post: ArchivedPost }) {
             </span>
           )}
           <span
-            className={`text-[10px] ${post.contentFidelity === "VERBATIM" ? "text-[#16A34A]" : "text-[#78716C]"}`}
+            className={`text-[10px] ${
+              post.contentFidelity === "VERBATIM"
+                ? "text-[#16A34A]"
+                : "text-[#78716C]"
+            }`}
           >
             {post.contentFidelity}
           </span>
@@ -304,49 +321,81 @@ function ArchivedPostCard({ post }: { post: ArchivedPost }) {
         </div>
       )}
 
-      {/* Metadata */}
-      <div className="pt-2 border-t border-[#E8DFD1] space-y-1.5 text-[10px] text-[#78716C]">
-        {/* Arkiv entity key */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <Shield className="w-3 h-3 text-[#16A34A] shrink-0" />
-          <span className="font-bold text-[#16A34A]">ARKIV ENTITY</span>
-          <code className="font-mono text-[9px] bg-[#E8DFD1]/60 px-1.5 py-0.5 rounded-sm break-all">
-            {post.entityKey}
-          </code>
+      {/* On-chain proof section */}
+      <div className="pt-2 border-t border-[#E8DFD1] space-y-2">
+        {/* Entity key */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <Shield className="w-3 h-3 text-[#16A34A] shrink-0" />
+            <span className="text-[10px] font-bold text-[#16A34A] uppercase tracking-wider">
+              Arkiv Entity
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <code className="font-mono text-[9px] bg-[#E8DFD1]/60 px-1.5 py-0.5 rounded-sm break-all text-[#171717]">
+              {post.entityKey}
+            </code>
+            <CopyButton value={post.entityKey} label="Entity Key" />
+          </div>
         </div>
 
-        {/* TX hash if available */}
-        {(post.txHash || post.localTxHash) && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[#78716C]">TX</span>
-            <code className="font-mono text-[9px] bg-[#E8DFD1]/60 px-1.5 py-0.5 rounded-sm break-all">
-              {post.txHash || post.localTxHash}
-            </code>
+        {/* TX hash */}
+        {txHash && (
+          <div className="space-y-1">
+            <div className="text-[10px] text-[#78716C] uppercase tracking-wider">
+              Transaction Hash
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <code className="font-mono text-[9px] bg-[#E8DFD1]/60 px-1.5 py-0.5 rounded-sm break-all text-[#171717]">
+                {txHash}
+              </code>
+              <CopyButton value={txHash} label="TX Hash" />
+            </div>
           </div>
         )}
 
+        {/* Action buttons */}
+        <div className="flex flex-wrap gap-2 pt-1">
+          {explorerUrl && (
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-sm border border-[#E8DFD1] hover:border-[#171717] text-[10px] text-[#78716C] hover:text-[#171717] transition"
+            >
+              <ExternalLink className="w-2.5 h-2.5" />
+              View on Explorer
+            </a>
+          )}
+          {post.postUrl && (
+            <a
+              href={post.postUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-sm border border-[#E8DFD1] hover:border-[#171717] text-[10px] text-[#78716C] hover:text-[#171717] transition"
+            >
+              <ExternalLink className="w-2.5 h-2.5" />
+              View Original X Post
+            </a>
+          )}
+        </div>
+
         {/* Timestamps */}
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-wrap gap-4 text-[10px] text-[#78716C]">
           {originalAt && (
             <span>
               ORIGINAL:{" "}
-              <span className="text-[#171717]">
-                {originalAt.toLocaleString()}
-              </span>
+              <span className="text-[#171717]">{originalAt.toLocaleString()}</span>
             </span>
           )}
           {capturedAt && (
             <span>
               ARCHIVED:{" "}
-              <span className="text-[#171717]">
-                {capturedAt.toLocaleString()}
-              </span>
+              <span className="text-[#171717]">{capturedAt.toLocaleString()}</span>
             </span>
           )}
           {expiresAt && (
-            <span
-              className={expiringSoon ? "text-[#F62440] font-bold" : ""}
-            >
+            <span className={expiringSoon ? "text-[#F62440] font-bold" : ""}>
               EXPIRES:{" "}
               <span>
                 {expiresAt.toLocaleDateString()}
@@ -355,18 +404,6 @@ function ArchivedPostCard({ post }: { post: ArchivedPost }) {
             </span>
           )}
         </div>
-
-        {/* Source link */}
-        {post.postUrl && (
-          <a
-            href={post.postUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 hover:text-[#171717] transition"
-          >
-            Original source <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-        )}
       </div>
     </article>
   );

@@ -18,7 +18,7 @@ import { MonitoringStatusBadge, SourceBadge } from "../../components/source-badg
 import { ToastProvider, useToast } from "../../components/toast";
 import { cn } from "../../lib/utils";
 
-type SourceKind = "X" | "BLUESKY" | "RSS" | "WEBSITE";
+type SourceKind = "X";
 
 const SOURCE_META: Record<
   SourceKind,
@@ -26,23 +26,8 @@ const SOURCE_META: Record<
 > = {
   X: {
     label: "X (Twitter)",
-    hint: "Username only — public posts and trading signals are searched and indexed via Firecrawl.",
+    hint: "Enter an X username to add a trader. Public posts and trading signals are indexed via Firecrawl.",
     glyph: "#",
-  },
-  BLUESKY: {
-    label: "Bluesky",
-    hint: "Public profile handle. We resolve the DID and store it as the stable identity — no API key or password needed.",
-    glyph: "\u25A7",
-  },
-  RSS: {
-    label: "RSS / Atom feed",
-    hint: "A feed URL. We validate it, extract the title, and mark it ready for monitoring.",
-    glyph: "\u25C9",
-  },
-  WEBSITE: {
-    label: "Authorized website",
-    hint: "Only when you are authorized to crawl the site. Requires a configured Firecrawl provider.",
-    glyph: "\u25CE",
   },
 };
 
@@ -59,9 +44,7 @@ function DiscoverContent() {
   const [creators, setCreators] = useState<CreatorListItem[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
-  const [sourceKind, setSourceKind] = useState<SourceKind>("X");
   const [input, setInput] = useState("");
-  const [websiteAuthorized, setWebsiteAuthorized] = useState(false);
   const [isResolving, setIsResolving] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -96,84 +79,26 @@ function DiscoverContent() {
   }, [searchParams, notify]);
 
   const previewUrl = useMemo(() => {
-    switch (sourceKind) {
-      case "X": {
-        const handle = input.replace(/^@/, "").replace(/[/?#].*$/, "");
-        if (!handle) return null;
-        return `https://x.com/${handle}`;
-      }
-      case "BLUESKY": {
-        const handle = input.replace(/^@/, "");
-        if (!handle) return null;
-        return `https://bsky.app/profile/${handle}`;
-      }
-      case "RSS": {
-        const url = input.trim();
-        if (!url) return null;
-        try {
-          const parsed = new URL(url);
-          return `Feed: ${parsed.hostname}`;
-        } catch {
-          return "Invalid URL";
-        }
-      }
-      case "WEBSITE": {
-        const url = input.trim();
-        if (!url) return null;
-        try {
-          const parsed = new URL(url);
-          return `Site: ${parsed.hostname}`;
-        } catch {
-          return "Invalid URL";
-        }
-      }
-    }
-  }, [sourceKind, input]);
+    const handle = input.replace(/^@/, "").replace(/[/?#].*$/, "");
+    if (!handle) return null;
+    return `https://x.com/${handle}`;
+  }, [input]);
 
   const buildPayload = (): Record<string, unknown> | null => {
     const value = input.trim();
     if (!value) return null;
-    switch (sourceKind) {
-      case "X":
-        return { sourceType: "X", username: value };
-      case "BLUESKY":
-        return { sourceType: "BLUESKY", handle: value };
-      case "RSS":
-        return { sourceType: "RSS", feedUrl: value };
-      case "WEBSITE":
-        return {
-          sourceType: "WEBSITE",
-          websiteUrl: value,
-          authorized: websiteAuthorized,
-        };
-    }
+    return { sourceType: "X", username: value };
   };
 
   const resolve = async () => {
     const payload = buildPayload();
     if (!payload) {
-      setFormError("Enter a value first.");
+      setFormError("Enter an X username.");
       return;
     }
     setFormError(null);
     setPreview(null);
     setAddedCreatorId(null);
-
-    if (sourceKind === "X" && /t\.me\/|telegram/i.test(input)) {
-      setFormError(
-        "Telegram channels are not supported. CallLedger monitors X accounts only. Enter the trader's X handle instead.",
-      );
-      return;
-    }
-
-    const needsAuthConfirmation =
-      sourceKind === "WEBSITE" && !websiteAuthorized;
-    if (needsAuthConfirmation) {
-      setFormError(
-        "Confirm that you are authorized to crawl this website before continuing.",
-      );
-      return;
-    }
 
     setIsResolving(true);
     try {
@@ -218,7 +143,6 @@ function DiscoverContent() {
       );
       setInput("");
       setPreview(null);
-      setWebsiteAuthorized(false);
       void loadCreators();
     } catch (error) {
       notify(
@@ -242,9 +166,7 @@ function DiscoverContent() {
             Discover Creators
           </h1>
           <p className="text-[11px] leading-relaxed text-[#78716C] font-sans max-w-[520px] break-words">
-            Add traders by X username, Bluesky handle, RSS feed, or an authorized
-            website. One creator can own multiple source identities — profiles are
-            never auto-merged.
+            Add traders by their X (Twitter) username. Public posts and trading signals are indexed automatically via Firecrawl.
           </p>
         </div>
 
@@ -274,11 +196,11 @@ function DiscoverContent() {
       {/* Banner */}
       <div className="w-full min-h-[60px] bg-[#171717] text-[#FFFAF3] px-4 py-3 rounded-[3px] flex flex-col justify-center">
         <div className="text-[10px] text-[#F5B94E] uppercase tracking-wider font-bold">
-          /// MULTI-SOURCE CREATOR ARCHITECTURE
+          /// X-ONLY TRADER MONITORING
         </div>
         <div className="text-[11px] leading-relaxed text-[#D6D3CD] font-sans mt-1">
           <strong className="text-[#FFFAF3] font-semibold">
-            Following a creator is an off-chain database operation
+            Following a trader is an off-chain database operation
           </strong>{" "}
           — no blockchain transaction, and no X follow is ever performed on your
           behalf.
@@ -295,70 +217,29 @@ function DiscoverContent() {
         </div>
 
         <div className="p-4 space-y-4">
-          {/* Source selector */}
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5">
-            {(Object.keys(SOURCE_META) as SourceKind[]).map((kind) => {
-              const meta = SOURCE_META[kind];
-              return (
-                <button
-                  key={kind}
-                  onClick={() => {
-                    setSourceKind(kind);
-                    setPreview(null);
-                    setFormError(null);
-                  }}
-                  className={cn(
-                    "flex min-w-0 items-center justify-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-[3px] text-[11px] border transition text-left",
-                    sourceKind === kind
-                      ? "bg-[#171717] text-[#FFFAF3] border-[#171717] font-semibold"
-                      : "border-[#E8DFD1] text-[#78716C] hover:text-[#171717] bg-[#FFF2DB]/40",
-                  )}
-                >
-                  <span aria-hidden className="w-3 text-center">{meta.glyph}</span>
-                  {meta.label}
-                </button>
-              );
-            })}
-          </div>
-
           <p className="text-[11px] text-[#78716C] font-sans">
-            {SOURCE_META[sourceKind].hint}
+            {SOURCE_META.X.hint}
           </p>
 
           {/* Input */}
           <div>
             <label className="text-[10px] text-[#78716C] uppercase">
-              {sourceKind === "X" && "X USERNAME (WITHOUT @)"}
-              {sourceKind === "BLUESKY" && "BLUESKY HANDLE"}
-              {sourceKind === "RSS" && "FEED URL"}
-              {sourceKind === "WEBSITE" && "WEBSITE URL"}
+              X USERNAME (WITHOUT @)
             </label>
             <div className="flex gap-2 mt-1">
               <div className="relative flex-1">
-                {(sourceKind === "X" || sourceKind === "BLUESKY") && (
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#78716C]">
-                    @
-                  </span>
-                )}
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#78716C]">
+                  @
+                </span>
                 <input
                   type="text"
                   required
-                  placeholder={
-                    sourceKind === "X"
-                      ? "DrProfitCrypto"
-                      : sourceKind === "BLUESKY"
-                        ? "trader.bsky.social"
-                        : sourceKind === "RSS"
-                          ? "https://example.com/feed.xml"
-                          : "https://example.com"
-                  }
+                  placeholder="DrProfitCrypto"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void resolve()}
                   className={cn(
-                    "w-full h-[27px] bg-[#FFFAF3] border border-[#171717]/70 rounded-[3px] py-1 pr-3 text-[11px] text-[#171717] focus:outline-none focus:border-[#171717]",
-                    (sourceKind === "X" || sourceKind === "BLUESKY") &&
-                      "pl-7",
+                    "w-full h-[27px] bg-[#FFFAF3] border border-[#171717]/70 rounded-[3px] py-1 px-3 pl-7 text-[11px] text-[#171717] focus:outline-none focus:border-[#171717]",
                   )}
                 />
               </div>
@@ -380,21 +261,6 @@ function DiscoverContent() {
               </div>
             )}
           </div>
-
-          {sourceKind === "WEBSITE" && (
-            <label className="flex items-start gap-2 text-xs font-sans text-[#78716C] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={websiteAuthorized}
-                onChange={(e) => setWebsiteAuthorized(e.target.checked)}
-                className="mt-0.5 accent-[#171717]"
-              />
-              <span>
-                I confirm that I am authorized to crawl this website and that it
-                is not an X/Twitter endpoint.
-              </span>
-            </label>
-          )}
 
           {formError && (
             <div className="text-xs p-2.5 rounded-sm border bg-[#F62440]/10 border-[#F62440]/30 text-[#F62440]">
@@ -490,8 +356,8 @@ function DiscoverContent() {
           <div className="py-6">
             <EmptyState
               icon={<Globe className="w-5 h-5" />}
-              title="No creators yet"
-              description="Add your first creator with the form above — X, Bluesky, RSS or an authorized website."
+              title="No traders yet"
+              description="Add your first trader by entering their X username in the form above."
             />
           </div>
         )}
