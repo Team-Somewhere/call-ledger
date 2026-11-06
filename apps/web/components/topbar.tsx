@@ -23,7 +23,7 @@ export function Topbar() {
   const [showWalletMenu, setShowWalletMenu] = useState(false);
 
   return (
-    <header className="w-full bg-[#FFFAF3] border-b border-[#E8DFD1] px-4 md:px-8 py-2.5 flex items-center justify-between sticky top-0 z-40">
+    <header className="w-full bg-[#FFFAF3] border-b border-[#E8DFD1] px-4 md:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2 sticky top-0 z-40">
       {/* Left: Brand Logo + Nav Links */}
       <div className="flex items-center gap-6 md:gap-10">
         {/* Brand Logo inspired by KOLLATERAL */}
@@ -63,7 +63,7 @@ export function Topbar() {
       </div>
 
       {/* Right: Network Segmented Control + Wallet Pill */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3 shrink-0">
         {/* Network Toggle */}
         <div className="flex items-center border border-[#E8DFD1] rounded-sm p-0.5 bg-[#FFF2DB]/60 text-[10px] font-mono">
           <button

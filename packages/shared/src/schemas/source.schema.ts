@@ -27,7 +27,8 @@ export const xHandleSchema = z
   .max(20)
   .transform((v) => v.replace(/^@+/, ""))
   .refine((v) => /^[A-Za-z0-9_]{1,15}$/.test(v), {
-    message: "Invalid X username format",
+    message:
+      "Not a valid X username. Use only letters, numbers and underscores (max 15). Display names like 'Dr. Prophet' are not usernames; enter the handle shown as @name on X.",
   });
 
 /** Bluesky handle: domain-style, e.g. trader.bsky.social */
