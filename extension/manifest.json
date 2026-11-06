@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "CallLedger for X",
+  "short_name": "CallLedger",
+  "version": "0.1.0",
+  "description": "Analyze trading strategies in X posts and review token data, with CallLedger. Unofficial; not affiliated with X.",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage", "sidePanel"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://api.dexscreener.com/*",
+    "https://api.geckoterminal.com/*",
+    "https://open.er-api.com/*",
+    "http://localhost:8000/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*"],
+      "js": ["src/content/index.js"],
+      "css": ["callledger-extension.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "CallLedger"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
