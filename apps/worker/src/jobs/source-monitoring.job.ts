@@ -20,6 +20,13 @@ import {
 } from "@call-ledger/api/source-adapters";
 import { env } from "../config/env";
 import { logger } from "../services/logger";
+import {
+  archivePostIfNew,
+  consumeBudget,
+  getBudgetStats,
+  getRemainingBudget,
+  isArkivWriteReady,
+} from "../services/arkiv-archiver";
 
 const workerId = `worker-${randomUUID()}`;
 const adapterRegistry = createAdapterRegistry({
@@ -50,12 +57,30 @@ export class SourceMonitoringWorker {
     if (this.running || this.stopping) return 0;
     this.running = true;
     try {
+      logger.info("[MONITOR] Starting monitoring cycle");
       let processed = 0;
+      let xProcessed = 0;
       while (processed < env.MONITORING_WORKER_BATCH_SIZE && !this.stopping) {
         const [source] = await this.claimDueSources(1);
         if (!source) break;
+        // Respect per-cycle X limit
+        if (
+          source.sourceType === "X" &&
+          xProcessed >= env.X_MONITOR_MAX_TRADERS_PER_CYCLE
+        ) {
+          // Release the lease immediately — we'll get it next cycle
+          await db
+            .update(creatorSources)
+            .set({ lockExpiresAt: null, lockedBy: null, updatedAt: new Date() })
+            .where(eq(creatorSources.id, source.id));
+          break;
+        }
         await this.processSource(source);
         processed += 1;
+        if (source.sourceType === "X") xProcessed++;
+      }
+      if (processed > 0) {
+        logger.info(`[MONITOR] Processed ${processed} source(s) this cycle.`);
       }
       return processed;
     } finally {
@@ -176,6 +201,22 @@ export class SourceMonitoringWorker {
       const type = sourceType(source.sourceType);
       const providerMeta = parseProviderMeta(source.providerMeta);
       const adapter = getAdapter(adapterRegistry, type);
+
+      // X-source budget check — respect daily Firecrawl request limit
+      if (type === "X") {
+        if (!consumeBudget()) {
+          const stats = getBudgetStats();
+          logger.warn(
+            `[MONITOR] Daily X request budget exhausted (${stats.usedRequests}/${stats.maxRequests}). Skipping @${source.handle ?? source.id}.`,
+          );
+          await this.recordSkipped(source, startedAt, "DAILY_BUDGET_EXHAUSTED");
+          return;
+        }
+        logger.info(
+          `[FIRECRAWL] Fetching latest posts for @${source.handle} (budget: ${getRemainingBudget()} remaining)`,
+        );
+      }
+
       const adapterSource: CreatorSource = {
         id: source.id,
         creatorId: source.creatorId,
@@ -253,6 +294,16 @@ export class SourceMonitoringWorker {
       completedAt.getTime() + (intervalSeconds + jitterSeconds()) * 1000,
     );
 
+    // Track newly-inserted posts for Arkiv archiving (X sources only)
+    const newlyInsertedPosts: Array<{
+      dbId: string;
+      sourcePostId: string;
+      authorHandle: string | null;
+      content: string | null;
+      canonicalUrl: string | null;
+      publishedAt: Date | null;
+    }> = [];
+
     await db.transaction(async (tx) => {
       let itemsInserted = 0;
       for (const post of result.posts) {
@@ -289,6 +340,16 @@ export class SourceMonitoringWorker {
 
         if (inserted) {
           itemsInserted += 1;
+          if (type === "X") {
+            newlyInsertedPosts.push({
+              dbId: inserted.id,
+              sourcePostId: post.sourcePostId,
+              authorHandle: post.authorHandle ?? source.handle,
+              content,
+              canonicalUrl: post.url ?? null,
+              publishedAt: post.publishedAt ?? null,
+            });
+          }
           continue;
         }
 
@@ -344,6 +405,46 @@ export class SourceMonitoringWorker {
         completedAt,
       });
     });
+
+    // --- Arkiv archiving (outside the DB transaction) ---
+    // Only X sources. Only newly-inserted posts. Only if Arkiv is configured.
+    if (type === "X" && newlyInsertedPosts.length > 0 && isArkivWriteReady()) {
+      logger.info(
+        `[ARCHIVE] ${newlyInsertedPosts.length} new post(s) to archive for @${source.handle}`,
+      );
+      let archived = 0;
+      let alreadyArchived = 0;
+      for (const post of newlyInsertedPosts) {
+        try {
+          const result = await archivePostIfNew({
+            creatorSourcePostId: post.dbId,
+            creatorId: source.creatorId,
+            sourcePostId: post.sourcePostId,
+            authorHandle: post.authorHandle ?? source.handle ?? "unknown",
+            authorDisplayName: source.displayName ?? post.authorHandle ?? source.handle ?? "unknown",
+            content: post.content,
+            canonicalUrl: post.canonicalUrl,
+            publishedAt: post.publishedAt,
+          });
+          if (result.skipped) {
+            alreadyArchived++;
+          } else {
+            archived++;
+            logger.info(
+              `[ARKIV] Archived post ${post.sourcePostId} — key=${result.entityKey}`,
+            );
+          }
+        } catch (err) {
+          logger.error(
+            `[ARKIV] Unexpected error archiving post ${post.sourcePostId}`,
+            err,
+          );
+        }
+      }
+      logger.info(
+        `[ARCHIVE] @${source.handle}: archived=${archived} skipped=${alreadyArchived}`,
+      );
+    }
   }
 
   private async recordSkipped(
@@ -493,7 +594,8 @@ function pollIntervalSeconds(type: CreatorSourceType): number {
     case "WEBSITE":
       return env.MONITORING_POLL_INTERVAL_WEBSITE_SECONDS;
     case "X":
-      return env.MONITORING_POLL_INTERVAL_RSS_SECONDS;
+      // Use X_MONITOR_DEFAULT_INTERVAL_MINUTES if set, otherwise fall back to RSS interval
+      return (env.X_MONITOR_DEFAULT_INTERVAL_MINUTES ?? 30) * 60;
   }
 }
 

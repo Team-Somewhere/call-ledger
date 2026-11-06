@@ -115,6 +115,27 @@ const workerEnvSchema = z.object({
     .string()
     .optional()
     .transform((value) => value === "true"),
+
+  // --- Arkiv Rabdi testnet ---
+  ARKIV_ACCESS_KEY: z.string().optional(),
+  ARKIV_RPC_URL: z.string().optional(),
+  ARKIV_ARCHIVER_PRIVATE_KEY: z.string().optional(),
+  ARKIV_POST_EXPIRY_DAYS: z.coerce.number().int().min(1).max(3650).default(365),
+
+  // --- X monitoring budget controls ---
+  X_MONITOR_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === "true"),
+  X_MONITOR_DEFAULT_INTERVAL_MINUTES: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(1440)
+    .default(30),
+  X_MONITOR_MAX_TRADERS_PER_CYCLE: z.coerce.number().int().min(1).max(50).default(5),
+  X_MONITOR_MAX_REQUESTS_PER_DAY: z.coerce.number().int().min(1).max(10000).default(10),
+  X_MONITOR_ESTIMATED_CREDITS_PER_REQUEST: z.coerce.number().int().min(1).default(30),
 });
 
 const parsed = workerEnvSchema.safeParse(process.env);
