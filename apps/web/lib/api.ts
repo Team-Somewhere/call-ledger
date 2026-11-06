@@ -1,0 +1,311 @@
+/**
+ * Browser API client.
+ *
+ * The Next.js app talks to the Express API directly (NEXT_PUBLIC_API_URL).
+ * The wallet session token is attached as a header. A connected wallet address
+ * alone is never treated as authentication.
+ */
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:8000";
+
+const SESSION_KEY = "callledger.wallet.session";
+
+export function getSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(SESSION_KEY);
+}
+
+export function setSessionToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  if (token) window.localStorage.setItem(SESSION_KEY, token);
+  else window.localStorage.removeItem(SESSION_KEY);
+}
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export class ApiRequestError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+interface ApiEnvelope<T> {
+  success: boolean;
+  data?: T;
+  meta?: unknown;
+  error?: ApiError;
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<{ data: T; meta?: unknown }> {
+  const token = getSessionToken();
+
+  const res = await fetch(`${API_BASE}/api${path}`, {
+    ...options,
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { "x-wallet-session": token } : {}),
+      ...(options.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  let payload: ApiEnvelope<T> | null = null;
+  try {
+    payload = (await res.json()) as ApiEnvelope<T>;
+  } catch {
+    // Non-JSON response (e.g. gateway error)
+  }
+
+  if (!res.ok || !payload?.success) {
+    throw new ApiRequestError(
+      payload?.error?.code ?? "REQUEST_FAILED",
+      payload?.error?.message ?? `Request failed with status ${res.status}`,
+      res.status,
+    );
+  }
+
+  return { data: payload.data as T, meta: payload.meta };
+}
+
+export const api = {
+  // Wallet auth
+  requestNonce: (address: string) =>
+    apiFetch<{
+      address: string;
+      nonce: string;
+      message: string;
+      domain: string;
+      expiresAt: string;
+    }>("/auth/wallet/nonce", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    }),
+
+  verifyWallet: (address: string, nonce: string, signature: string) =>
+    apiFetch<{
+      token: string;
+      user: { id: string; address: string; displayName: string | null };
+      isNewUser: boolean;
+    }>("/auth/wallet/verify", {
+      method: "POST",
+      body: JSON.stringify({ address, nonce, signature }),
+    }),
+
+  me: () =>
+    apiFetch<{ userId: string; address: string; isAdmin: boolean }>("/auth/me"),
+
+  // Creator sources
+  resolveSource: (body: Record<string, unknown>) =>
+    apiFetch<ResolvedSourcePreview>("/creators/resolve", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  createCreator: (body: Record<string, unknown>) =>
+    apiFetch<CreateCreatorResponse>("/creators", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  listCreators: (params: string) =>
+    apiFetch<CreatorListItem[]>(`/creators${params}`),
+
+  getCreator: (id: string) =>
+    apiFetch<CreatorDetailResponse>(`/creators/${id}`),
+
+  followCreator: (id: string) =>
+    apiFetch<unknown>(`/creators/${id}/follow`, { method: "POST" }),
+
+  unfollowCreator: (id: string) =>
+    apiFetch<unknown>(`/creators/${id}/follow`, { method: "DELETE" }),
+
+  listFollowing: (params: string) =>
+    apiFetch<FollowingItem[]>(`/me/following${params}`),
+
+  activity: (params: string) =>
+    apiFetch<ActivityPost[]>(`/me/activity${params}`),
+
+  creatorPosts: (creatorId: string, params: string) =>
+    apiFetch<ActivityPost[]>(`/creators/${creatorId}/posts${params}`),
+
+  monitoringDashboard: () =>
+    apiFetch<MonitoringDashboard>("/monitoring/overview"),
+
+  monitoringLogs: (limit = 25) =>
+    apiFetch<MonitoringLog[]>(`/monitoring/logs?limit=${limit}`),
+
+  creatorSourceStatus: (sourceId: string) =>
+    apiFetch<CreatorSourceStatus>(`/creator-sources/${sourceId}/status`),
+
+  deleteSource: (sourceId: string) =>
+    apiFetch<unknown>(`/creator-sources/${sourceId}`, { method: "DELETE" }),
+
+  monitoringOverview: () =>
+    apiFetch<{
+      configuration: {
+        xIngestionEnabled: boolean;
+        firecrawlEnabled: boolean;
+        firecrawlConfigured: boolean;
+        adapters: Array<{
+          sourceType: string;
+          ingestionSupported: boolean;
+          description: string;
+        }>;
+      };
+      sourceCounts: Record<string, number>;
+      totals: {
+        sources: number;
+        activeSources: number;
+        waitingForAuthorizedAccess: number;
+      };
+    }>("/monitoring/sources/overview"),
+};
+
+export interface SourceSummary {
+  id: string;
+  sourceType: "X" | "BLUESKY" | "RSS" | "WEBSITE";
+  handle: string | null;
+  canonicalUrl: string;
+  status: "ACTIVE" | "WAITING_FOR_AUTHORIZED_ACCESS" | "DISABLED" | "ERROR";
+  verificationStatus: "UNVERIFIED" | "SELF_VERIFIED" | "ADMIN_VERIFIED";
+  lastFetchedAt: string | null;
+  nextFetchAt: string | null;
+  lastError: string | null;
+}
+
+export interface CreatorListItem {
+  id: string;
+  displayName: string;
+  description: string | null;
+  avatarUrl: string | null;
+  status: string;
+  createdAt: string;
+  sources: SourceSummary[];
+}
+
+export interface CreatorDetailResponse extends CreatorListItem {
+  updatedAt: string;
+  followersCount: number;
+  isFollowing: boolean;
+  sources: Array<
+    SourceSummary & {
+      externalId: string | null;
+      linkRelationshipType: string | null;
+      linkVerificationMethod: string | null;
+    }
+  >;
+}
+
+export interface FollowingItem {
+  followId: string;
+  followedAt: string;
+  notificationEnabled: boolean;
+  creator: CreatorListItem;
+}
+
+export interface ActivityPost {
+  id: string;
+  externalPostId: string;
+  sourceType: "X" | "BLUESKY" | "RSS" | "WEBSITE";
+  authorExternalId: string | null;
+  authorHandle: string | null;
+  title: string | null;
+  content: string | null;
+  canonicalUrl: string | null;
+  publishedAt: string | null;
+  fetchedAt: string;
+  mediaUrls: string[] | null;
+  isReply: boolean;
+  isRepost: boolean;
+  creatorId: string;
+  creatorName: string;
+  creatorAvatarUrl: string | null;
+  sourceId: string;
+  sourceHandle: string | null;
+  sourceUrl: string;
+  sourceStatus: string;
+}
+
+export interface MonitoringDashboard {
+  totals: {
+    creators: number;
+    sources: number;
+    activeSources: number;
+    waitingForAuthorizedAccess: number;
+    postsCollected: number;
+    postsCollectedToday: number;
+    failedRunsLast24Hours: number;
+    sourcesBackingOff: number;
+  };
+  sourcesByType: Record<string, number>;
+  lastSuccessfulFetch: string | null;
+}
+
+export interface MonitoringLog {
+  id: string;
+  sourceId: string;
+  sourceType: "X" | "BLUESKY" | "RSS" | "WEBSITE";
+  status: string;
+  itemsFound: number;
+  itemsInserted: number;
+  startedAt: string;
+  completedAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  creatorId: string;
+  creatorName: string;
+  creatorAvatarUrl: string | null;
+  sourceHandle: string | null;
+  sourceUrl: string;
+}
+
+export interface CreatorSourceStatus {
+  id: string;
+  creatorId: string;
+  creatorName: string;
+  creatorAvatarUrl: string | null;
+  sourceType: "X" | "BLUESKY" | "RSS" | "WEBSITE";
+  handle: string | null;
+  canonicalUrl: string;
+  status: string;
+  lastFetchedAt: string | null;
+  nextFetchAt: string | null;
+  lastError: string | null;
+  retryCount: number;
+  consecutiveFailures: number;
+}
+
+export interface ResolvedSourcePreview {
+  sourceType: "X" | "BLUESKY" | "RSS" | "WEBSITE";
+  handle: string | null;
+  externalId: string | null;
+  canonicalUrl: string;
+  displayName: string | null;
+  description: string | null;
+  avatarUrl: string | null;
+  status: SourceSummary["status"];
+  notices: string[];
+  existingCreatorId: string | null;
+  alreadyExists: boolean;
+}
+
+export interface CreateCreatorResponse {
+  creator: CreatorDetailResponse;
+  source: SourceSummary;
+  notices: string[];
+  alreadyExisted: boolean;
+}
