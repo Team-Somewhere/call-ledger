@@ -27,8 +27,8 @@ const CHAIN_WORDS: Record<string, "ethereum" | "base" | "solana" | "arbitrum" | 
   optimism: "optimism", op: "optimism",
 };
 
-const BUY_RE = /\b(buy|buying|long|accumulate|ape(?:\s+in)?|enter)\b/i;
-const SELL_RE = /\b(sell|selling|short|exit|close)\b/i;
+const BUY_RE = /\b(buy|buying|long|accumulate|ape(?:\s+in)?|enter|entry|entries|re-?entry)\b/i;
+const SELL_RE = /\b(sell|selling|short|exit|exits|close|closing|take\s+profit)\b/i;
 const OPINION_RE = /\b(i think|imo|looks? (bullish|bearish|good|strong)|bullish on|bearish on|could|might|maybe|probably|in my opinion|thinking about)\b/i;
 const HYPOTHETICAL_RE = /\b(if|hypothetically|for example|e\.g\.|example|imagine|what if)\b/i;
 const HISTORICAL_RE = /\b(i (bought|sold|entered|exited)|we (bought|sold)|bought (at|for|in)|sold (at|for)|made \$?\d|up \d+%|pnl|closed (my|the) (trade|position))\b/i;

@@ -38,6 +38,11 @@ function readStatusLink(article: HTMLElement): { handle: string; id: string } | 
     const m = path.match(STATUS_RE);
     if (m) return { handle: m[1], id: m[2] };
   }
+  // Single-tweet status page: focal post uses current page location
+  if (typeof window !== "undefined" && window.location) {
+    const m = window.location.pathname.match(STATUS_RE);
+    if (m) return { handle: m[1], id: m[2] };
+  }
   return null;
 }
 
