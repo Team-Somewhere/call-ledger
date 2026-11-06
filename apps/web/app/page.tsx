@@ -5,12 +5,16 @@ import Link from "next/link";
 import {
   Check,
   ExternalLink,
+  LineChart,
   Loader2,
   Search,
+  TrendingDown,
+  TrendingUp,
   UserPlus,
 } from "lucide-react";
 import { CreateStrategyModal } from "../components/create-strategy-modal";
 import { SignalCard } from "../components/signal-card";
+import { TrendingChartDrawer, type TrendingTickerInfo } from "../components/trending-chart-drawer";
 import { api, type ActivityPost, type CreatorListItem } from "../lib/api";
 import { MOCK_SIGNALS, MockSignal } from "../lib/mock-data";
 import { useWalletSession } from "../lib/use-wallet-session";
@@ -40,6 +44,39 @@ export default function TerminalPage() {
     null,
   );
   const [busyCreatorId, setBusyCreatorId] = useState<string | null>(null);
+
+  // Live market price oracle state & selected ticker for TradingView drawer
+  const [livePrices, setLivePrices] = useState<
+    Record<string, { priceUsd: number; change24h: number }>
+  >({});
+  const [selectedTrendingTicker, setSelectedTrendingTicker] =
+    useState<TrendingTickerInfo | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const fetchLivePrices = async () => {
+      try {
+        const res = await fetch("/api/market/trending");
+        const json = (await res.json()) as {
+          success?: boolean;
+          data?: Record<string, { priceUsd: number; change24h: number }>;
+        };
+        if (active && json.success && json.data) {
+          setLivePrices(json.data);
+        }
+      } catch (err) {
+        console.warn("Could not fetch live market prices:", err);
+      }
+    };
+
+    void fetchLivePrices();
+    const interval = setInterval(fetchLivePrices, 20_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const loadPlatformFeed = useCallback(async () => {
     setPostsLoading(true);
@@ -176,12 +213,52 @@ export default function TerminalPage() {
     );
   });
 
-  const trendingTickers = [
-    { rank: 1, symbol: "$BTC", sentiment: "MIXED", count: "22 CALLS" },
-    { rank: 2, symbol: "$ETH", sentiment: "LONG", count: "9 CALLS" },
-    { rank: 3, symbol: "$SOL", sentiment: "LONG", count: "7 CALLS" },
-    { rank: 4, symbol: "$MSTR", sentiment: "LONG", count: "2 CALLS" },
-    { rank: 5, symbol: "$AVAX", sentiment: "SHORT", count: "2 CALLS" },
+  const trendingTickers: TrendingTickerInfo[] = [
+    {
+      rank: 1,
+      symbol: "$BTC",
+      name: "Bitcoin",
+      sentiment: "MIXED",
+      count: "22 CALLS",
+      priceUsd: livePrices.BTC?.priceUsd,
+      change24h: livePrices.BTC?.change24h,
+    },
+    {
+      rank: 2,
+      symbol: "$ETH",
+      name: "Ethereum",
+      sentiment: "LONG",
+      count: "9 CALLS",
+      priceUsd: livePrices.ETH?.priceUsd,
+      change24h: livePrices.ETH?.change24h,
+    },
+    {
+      rank: 3,
+      symbol: "$HYPE",
+      name: "Hyperliquid",
+      sentiment: "LONG",
+      count: "8 CALLS",
+      priceUsd: livePrices.HYPE?.priceUsd,
+      change24h: livePrices.HYPE?.change24h,
+    },
+    {
+      rank: 4,
+      symbol: "$SOL",
+      name: "Solana",
+      sentiment: "LONG",
+      count: "7 CALLS",
+      priceUsd: livePrices.SOL?.priceUsd,
+      change24h: livePrices.SOL?.change24h,
+    },
+    {
+      rank: 5,
+      symbol: "$AVAX",
+      name: "Avalanche",
+      sentiment: "SHORT",
+      count: "2 CALLS",
+      priceUsd: livePrices.AVAX?.priceUsd,
+      change24h: livePrices.AVAX?.change24h,
+    },
   ];
 
   // Format relative time
@@ -521,37 +598,73 @@ export default function TerminalPage() {
 
           {/* TRENDING TICKERS */}
           <div className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-3">
-            <div className="text-[10px] uppercase text-[#78716C] pb-2 border-b border-[#E8DFD1] tracking-wider">
-              TRENDING TICKERS
+            <div className="flex items-center justify-between pb-2 border-b border-[#E8DFD1]">
+              <div className="text-[10px] uppercase text-[#78716C] tracking-wider flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
+                <span>TRENDING TICKERS</span>
+              </div>
+              <span className="text-[9px] text-[#78716C]">CLICK FOR CHART</span>
             </div>
             <div className="divide-y divide-[#E8DFD1]/60 text-xs">
-              {trendingTickers.map((t) => (
-                <div
-                  key={t.rank}
-                  className="py-2 flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#78716C] text-[10px]">{t.rank}</span>
-                    <span className="font-bold text-[#171717]">{t.symbol}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`text-[10px] font-bold ${
-                        t.sentiment === "LONG"
-                          ? "text-[#16A34A]"
-                          : t.sentiment === "SHORT"
-                            ? "text-[#F62440]"
-                            : "text-[#78716C]"
-                      }`}
-                    >
-                      {t.sentiment}
-                    </span>
-                    <span className="text-[10px] text-[#78716C]">
-                      {t.count}
-                    </span>
-                  </div>
-                </div>
-              ))}
+              {trendingTickers.map((t) => {
+                const isPositive = (t.change24h ?? 0) >= 0;
+                return (
+                  <button
+                    key={t.rank}
+                    type="button"
+                    onClick={() => setSelectedTrendingTicker(t)}
+                    className="w-full py-2 flex items-center justify-between text-left hover:bg-[#FFF2DB]/80 -mx-1 px-1 rounded-xs transition group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[#78716C] text-[10px] w-3 font-mono">{t.rank}</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-[#171717] group-hover:text-black">{t.symbol}</span>
+                          <LineChart className="w-3 h-3 text-[#78716C] opacity-0 group-hover:opacity-100 transition" />
+                        </div>
+                        <span className="text-[9px] text-[#78716C] block leading-tight">{t.count}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      {t.priceUsd !== undefined ? (
+                        <div className="font-bold text-[#171717] text-[11px]">
+                          ${t.priceUsd >= 1000
+                            ? t.priceUsd.toLocaleString("en-US", { maximumFractionDigits: 0 })
+                            : t.priceUsd.toFixed(2)}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-[#78716C]">Loading...</div>
+                      )}
+                      {t.change24h !== undefined ? (
+                        <div
+                          className={`text-[9px] font-bold flex items-center justify-end gap-0.5 ${
+                            isPositive ? "text-[#16A34A]" : "text-[#F62440]"
+                          }`}
+                        >
+                          {isPositive ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+                          <span>
+                            {isPositive ? "+" : ""}
+                            {t.change24h.toFixed(2)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span
+                          className={`text-[9px] font-bold ${
+                            t.sentiment === "LONG"
+                              ? "text-[#16A34A]"
+                              : t.sentiment === "SHORT"
+                                ? "text-[#F62440]"
+                                : "text-[#78716C]"
+                          }`}
+                        >
+                          {t.sentiment}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -581,6 +694,13 @@ export default function TerminalPage() {
         onClose={() => setIsModalOpen(false)}
         defaultCreatorId={selectedSignal?.creatorId}
       />
+
+      {selectedTrendingTicker && (
+        <TrendingChartDrawer
+          ticker={selectedTrendingTicker}
+          onClose={() => setSelectedTrendingTicker(null)}
+        />
+      )}
     </div>
   );
 }
