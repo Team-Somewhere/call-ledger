@@ -46,6 +46,10 @@ const envSchema = z.object({
     .optional()
     .transform((val) => val === "true"),
 
+  // --- Arkiv Rabdi testnet configuration ---
+  ARKIV_ACCESS_KEY: z.string().optional(),
+  ARKIV_RPC_URL: z.string().optional(),
+
   // Wallet auth session lifetime (nonce TTL in milliseconds)
   WALLET_NONCE_TTL_MS: z
     .string()
