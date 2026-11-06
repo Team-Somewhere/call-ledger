@@ -26,7 +26,7 @@ const SOURCE_META: Record<
 > = {
   X: {
     label: "X (Twitter)",
-    hint: "Username only — no X API key required to add. Live monitoring awaits authorized access.",
+    hint: "Username only — public posts and trading signals are searched and indexed via Firecrawl.",
     glyph: "#",
   },
   BLUESKY: {
@@ -197,8 +197,11 @@ function DiscoverContent() {
 
   const addCreator = async () => {
     if (!isAuthenticated) {
-      notify("error", "Sign in with your wallet before adding creators.");
-      return;
+      const connected = await connect();
+      if (!connected) {
+        notify("error", "Sign in before adding creators.");
+        return;
+      }
     }
     const payload = buildPayload();
     if (!payload || !preview) return;
@@ -415,11 +418,21 @@ function DiscoverContent() {
                 />
               </div>
 
+              {preview.status === "ACTIVE" && (
+                <div className="text-[10px] text-[#16A34A] font-sans leading-relaxed bg-[#16A34A]/10 border border-[#16A34A]/30 rounded-[3px] px-2.5 py-2 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
+                  <span>
+                    Live source verified — recent posts and trading signals will be
+                    indexed immediately upon adding.
+                  </span>
+                </div>
+              )}
+
               {preview.status === "WAITING_FOR_AUTHORIZED_ACCESS" && (
                 <div className="text-[10px] text-[#9B7547] font-sans leading-relaxed bg-[#FFF0D8] border border-[#E8DFD1] rounded-[3px] px-2.5 py-2">
                   WAITING_FOR_AUTHORIZED_ACCESS — the creator is saved in
                   CallLedger, but live X monitoring is not enabled until an
-                  authorized X data source is configured.
+                  authorized X data source or Firecrawl is configured.
                 </div>
               )}
 
@@ -448,15 +461,12 @@ function DiscoverContent() {
                 ) : (
                   <UserPlus className="w-3.5 h-3.5" />
                 )}
-                {preview.alreadyExists
-                  ? "Already on CallLedger — use existing record"
-                  : "Add to CallLedger"}
+                {!isAuthenticated
+                  ? "Sign in & Add to CallLedger"
+                  : preview.alreadyExists
+                    ? "Already on CallLedger — view / use record"
+                    : "Add to CallLedger"}
               </button>
-              {!isAuthenticated && (
-                <div className="text-[10px] text-[#78716C] font-sans text-center">
-                  Sign in with your wallet to add creators.
-                </div>
-              )}
             </div>
           )}
         </div>

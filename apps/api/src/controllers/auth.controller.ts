@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { walletNonceRequestSchema, walletVerifySchema } from "@call-ledger/shared";
 import {
+  createGuestSession,
   createWalletNonce,
   verifyWalletSignature,
 } from "../services/wallet-auth.service";
@@ -62,4 +63,15 @@ export async function getSession(req: Request, res: Response): Promise<void> {
     address: req.auth.address,
     isAdmin: req.auth.isAdmin,
   });
+}
+
+/** POST /api/auth/wallet/guest — 1-click frictionless guest/demo wallet */
+export async function guestLogin(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const preferredAddress =
+    typeof req.body?.address === "string" ? req.body.address : undefined;
+  const result = await createGuestSession(preferredAddress);
+  sendSuccess(res, result);
 }

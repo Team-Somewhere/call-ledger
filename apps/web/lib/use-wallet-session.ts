@@ -77,9 +77,18 @@ export function useWalletSession() {
     try {
       const provider = window.ethereum;
       if (!provider) {
-        throw new Error(
-          "No EVM wallet detected. Install MetaMask, Rabby, or Coinbase Wallet to sign in.",
-        );
+        // Fallback to frictionless 1-click guest session if browser has no extension
+        const guestRes = await api.guestLogin();
+        setSessionToken(guestRes.data.token);
+        setState({
+          address: guestRes.data.user.address,
+          userId: guestRes.data.user.id,
+          isAdmin: false,
+          isConnecting: false,
+          error: null,
+        });
+        await refresh();
+        return true;
       }
 
       const accounts = (await provider.request({

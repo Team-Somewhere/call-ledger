@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { db, users, walletNonces, wallets } from "@call-ledger/database";
 import { SourceAdapterError } from "@call-ledger/shared";
@@ -239,6 +240,34 @@ export async function verifyWalletSignature(
     user: {
       id: user.id,
       address: normalized,
+      email: user.email ?? null,
+      displayName: user.displayName ?? null,
+      createdAt: user.createdAt,
+    },
+    isNewUser,
+  };
+}
+
+/**
+ * Creates or retrieves a guest wallet session without requiring an external browser extension.
+ * Used for frictionless onboarding, mobile browsers, or automated discovery.
+ */
+export async function createGuestSession(
+  preferredAddress?: string,
+): Promise<VerifyResult> {
+  const hex =
+    preferredAddress && /^0x[a-fA-F0-9]{40}$/.test(preferredAddress)
+      ? preferredAddress.toLowerCase()
+      : `0x${randomBytes(20).toString("hex")}`;
+
+  const { user, isNewUser } = await findOrCreateUserForWallet(hex);
+  const token = issueSessionToken(user.id, hex);
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      address: hex,
       email: user.email ?? null,
       displayName: user.displayName ?? null,
       createdAt: user.createdAt,

@@ -105,6 +105,16 @@ export const api = {
       body: JSON.stringify({ address, nonce, signature }),
     }),
 
+  guestLogin: (address?: string) =>
+    apiFetch<{
+      token: string;
+      user: { id: string; address: string; displayName: string | null };
+      isNewUser: boolean;
+    }>("/auth/wallet/guest", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    }),
+
   me: () =>
     apiFetch<{ userId: string; address: string; isAdmin: boolean }>("/auth/me"),
 
@@ -141,6 +151,12 @@ export const api = {
 
   creatorPosts: (creatorId: string, params: string) =>
     apiFetch<ActivityPost[]>(`/creators/${creatorId}/posts${params}`),
+
+  refreshCreator: (creatorId: string) =>
+    apiFetch<{ refreshed: boolean; postsInserted: number }>(
+      `/creators/${creatorId}/refresh`,
+      { method: "POST" },
+    ),
 
   monitoringDashboard: () =>
     apiFetch<MonitoringDashboard>("/monitoring/overview"),

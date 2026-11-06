@@ -13,4 +13,8 @@ authRouter.post(
   "/wallet/verify",
   asyncHandler(authController.verifyWallet),
 );
+authRouter.post(
+  "/wallet/guest",
+  asyncHandler(authController.guestLogin),
+);
 authRouter.get("/me", requireAuth, asyncHandler(authController.getSession));

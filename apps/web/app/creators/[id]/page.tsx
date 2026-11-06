@@ -8,10 +8,12 @@ import {
   CheckCircle2,
   ExternalLink,
   Loader2,
+  RefreshCw,
   ShieldCheck,
   UserMinus,
   UserPlus,
 } from "lucide-react";
+import { cn } from "../../../lib/utils";
 import {
   api,
   ApiRequestError,
@@ -42,6 +44,26 @@ function CreatorProfileContent({ id }: { id: string }) {
   const [posts, setPosts] = useState<ActivityPost[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
   const [postsError, setPostsError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadPosts = useCallback(async () => {
+    try {
+      const { data } = await api.creatorPosts(
+        id,
+        "?limit=20&includeReplies=true&includeReposts=true",
+      );
+      setPosts(data);
+      setPostsError(null);
+    } catch (err: unknown) {
+      setPostsError(
+        err instanceof ApiRequestError
+          ? err.message
+          : "Could not load recent posts.",
+      );
+    } finally {
+      setPostsLoading(false);
+    }
+  }, [id]);
 
   const load = useCallback(async () => {
     try {
@@ -62,28 +84,22 @@ function CreatorProfileContent({ id }: { id: string }) {
   }, [load]);
 
   useEffect(() => {
-    let active = true;
-    void api
-      .creatorPosts(id, "?limit=5&includeReplies=true&includeReposts=true")
-      .then(({ data }) => {
-        if (active) setPosts(data);
-      })
-      .catch((err: unknown) => {
-        if (active) {
-          setPostsError(
-            err instanceof ApiRequestError
-              ? err.message
-              : "Could not load recent posts.",
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setPostsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
+    void loadPosts();
+  }, [loadPosts]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await api.refreshCreator(id);
+      notify("success", "Fetched latest posts from X.");
+      await loadPosts();
+      await load();
+    } catch {
+      notify("error", "Failed to refresh posts.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const toggleFollow = async () => {
     if (!creator) return;
@@ -308,8 +324,20 @@ function CreatorProfileContent({ id }: { id: string }) {
       </div>
 
       <section className="space-y-3">
-        <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
-          // RECENT SOURCE POSTS
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
+            // RECENT SOURCE POSTS
+          </div>
+          <button
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono bg-[#FFF2DB] hover:bg-[#FFE5BF] border border-[#E8DFD1] text-[#171717] rounded-sm transition disabled:opacity-50"
+          >
+            <RefreshCw
+              className={cn("w-3 h-3", isRefreshing && "animate-spin")}
+            />
+            <span>{isRefreshing ? "Fetching from X…" : "Fetch Latest Posts"}</span>
+          </button>
         </div>
         {postsError && (
           <div className="rounded-sm border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -324,57 +352,118 @@ function CreatorProfileContent({ id }: { id: string }) {
             title="No posts collected yet"
             description={
               waiting
-                ? "Posts will appear when an authorized source becomes available."
+                ? "Click 'Fetch Latest Posts' to index recent posts from X."
                 : "This creator's connected sources have not produced any posts yet."
             }
           />
         ) : (
           <div className="divide-y divide-[#E8DFD1] rounded-sm border border-[#E8DFD1] bg-[#FFFAF3]">
-            {posts.map((post) => (
-              <article key={post.id} className="space-y-2 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <SourceBadge sourceType={post.sourceType} />
-                    {post.isReply && (
-                      <span className="text-[9px] text-[#78716C]">REPLY</span>
-                    )}
-                    {post.isRepost && (
-                      <span className="text-[9px] text-[#78716C]">REPOST</span>
-                    )}
+            {posts.map((post) => {
+              const signal = parseSignalFromPost(post.content || post.title);
+              return (
+                <article key={post.id} className="space-y-2 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <SourceBadge sourceType={post.sourceType} />
+                      {post.isReply && (
+                        <span className="text-[9px] text-[#78716C]">REPLY</span>
+                      )}
+                      {post.isRepost && (
+                        <span className="text-[9px] text-[#78716C]">REPOST</span>
+                      )}
+                    </div>
+                    <time className="text-[10px] text-[#78716C]">
+                      {new Date(
+                        post.publishedAt ?? post.fetchedAt,
+                      ).toLocaleString()}
+                    </time>
                   </div>
-                  <time className="text-[10px] text-[#78716C]">
-                    {new Date(
-                      post.publishedAt ?? post.fetchedAt,
-                    ).toLocaleString()}
-                  </time>
-                </div>
-                {post.title && (
-                  <h2 className="text-xs font-bold text-[#171717]">
-                    {post.title}
-                  </h2>
-                )}
-                {post.content && (
-                  <p className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-[#292524]">
-                    {post.content}
-                  </p>
-                )}
-                {post.canonicalUrl && (
-                  <a
-                    href={post.canonicalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-[#78716C] hover:text-[#171717]"
-                  >
-                    Original source <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </article>
-            ))}
+                  {post.title && (
+                    <h2 className="text-xs font-bold text-[#171717]">
+                      {post.title}
+                    </h2>
+                  )}
+                  {post.content && (
+                    <p className="whitespace-pre-wrap break-words font-sans text-xs leading-relaxed text-[#292524]">
+                      {post.content}
+                    </p>
+                  )}
+                  {signal && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-[#FFF2DB] border border-[#E8DFD1] text-[#171717]">
+                        PRICE TARGET
+                      </span>
+                      {signal.ticker && (
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm bg-[#171717] text-[#FFFAF3]">
+                          {signal.ticker}
+                        </span>
+                      )}
+                      {signal.direction && (
+                        <span
+                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-sm border ${
+                            signal.direction === "LONG"
+                              ? "bg-[#16A34A]/10 border-[#16A34A]/40 text-[#16A34A]"
+                              : "bg-[#F62440]/10 border-[#F62440]/40 text-[#F62440]"
+                          }`}
+                        >
+                          {signal.direction === "LONG" ? "▲ Long" : "▼ Short"}
+                        </span>
+                      )}
+                      {signal.price && (
+                        <span className="text-[10px] font-mono text-[#78716C]">
+                          target: {signal.price}
+                        </span>
+                      )}
+                      <span className="text-[9px] font-mono text-[#78716C] ml-auto">
+                        ARKIV-INDEXED
+                      </span>
+                    </div>
+                  )}
+                  {post.canonicalUrl && (
+                    <a
+                      href={post.canonicalUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[10px] text-[#78716C] hover:text-[#171717]"
+                    >
+                      Original source <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
     </div>
   );
+}
+
+function parseSignalFromPost(text: string | null) {
+  if (!text) return null;
+  const tickerMatch = text.match(
+    /\$(?:BTC|ETH|SOL|BNB|XRP|DOGE|ADA|AVAX|LINK|SUI|PEPE|NEAR|APT|RENDER|TAO|FET|MSTR|[A-Z]{2,6})\b/i,
+  );
+  const directionMatch = text.match(
+    /\b(long|short|buy|sell|breakout|target|accumulate|dump|pump)\b/i,
+  );
+  const priceMatch = text.match(
+    /\$([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?(?:k|m)?)/i,
+  );
+
+  if (!tickerMatch && !directionMatch) return null;
+
+  const ticker = tickerMatch ? tickerMatch[0].toUpperCase() : null;
+  const dir = directionMatch && directionMatch[1] ? directionMatch[1].toUpperCase() : null;
+  const isLong =
+    dir === "LONG" || dir === "BUY" || dir === "ACCUMULATE" || dir === "BREAKOUT";
+  const isShort = dir === "SHORT" || dir === "SELL" || dir === "DUMP";
+
+  return {
+    ticker,
+    direction: isLong ? "LONG" : isShort ? "SHORT" : null,
+    price: priceMatch ? priceMatch[0] : null,
+  };
 }
 
 export default function CreatorPage({ params }: CreatorPageProps) {
