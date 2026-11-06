@@ -18,4 +18,5 @@ export const walletVerifySchema = z.object({
     .string()
     .trim()
     .regex(/^0x[a-fA-F0-9]+$/, "Invalid signature encoding"),
+  message: z.string().optional(),
 });

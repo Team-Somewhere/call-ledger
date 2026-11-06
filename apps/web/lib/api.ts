@@ -95,14 +95,14 @@ export const api = {
       body: JSON.stringify({ address }),
     }),
 
-  verifyWallet: (address: string, nonce: string, signature: string) =>
+  verifyWallet: (address: string, nonce: string, signature: string, message?: string) =>
     apiFetch<{
       token: string;
       user: { id: string; address: string; displayName: string | null };
       isNewUser: boolean;
     }>("/auth/wallet/verify", {
       method: "POST",
-      body: JSON.stringify({ address, nonce, signature }),
+      body: JSON.stringify({ address, nonce, signature, message }),
     }),
 
   guestLogin: (address?: string) =>

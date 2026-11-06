@@ -47,6 +47,7 @@ export async function verifyWallet(
     address: input.address,
     nonce: input.nonce,
     signature: input.signature,
+    message: input.message,
   });
 
   sendSuccess(res, result);

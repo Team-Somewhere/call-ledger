@@ -115,6 +115,8 @@ export interface VerifyInput {
   address: string;
   nonce: string;
   signature: string;
+  /** Optional exact message that was signed by the client. */
+  message?: string;
   /** Rebuilds the exact message that was signed. */
   messageBuilder?: (params: {
     domain: string;
@@ -178,17 +180,33 @@ export async function verifyWalletSignature(
     );
   }
 
-  const domain = record.domain ?? "localhost";
-  const issuedAt = record.createdAt.toISOString();
-  const expirationTime = record.expiresAt.toISOString();
+  let message: string;
+  if (typeof input.message === "string" && input.message.trim().length > 0) {
+    // When the client supplies the signed message, verify it binds to this nonce and address
+    if (
+      !input.message.includes(record.nonce) ||
+      !input.message.toLowerCase().includes(normalized)
+    ) {
+      throw new SourceAdapterError(
+        "INVALID_MESSAGE",
+        "The signed message does not match the issued nonce or address",
+        400,
+      );
+    }
+    message = input.message;
+  } else {
+    const domain = record.domain ?? "localhost";
+    const issuedAt = record.createdAt.toISOString();
+    const expirationTime = record.expiresAt.toISOString();
 
-  const message = (input.messageBuilder ?? buildWalletLoginMessage)({
-    domain,
-    address: normalized,
-    nonce: record.nonce,
-    issuedAt,
-    expirationTime,
-  });
+    message = (input.messageBuilder ?? buildWalletLoginMessage)({
+      domain,
+      address: normalized,
+      nonce: record.nonce,
+      issuedAt,
+      expirationTime,
+    });
+  }
 
   let signer: string;
   try {

@@ -19,7 +19,6 @@ function isSourceAdapterError(
 ): err is { code: string; message: string; statusCode: number } {
   return (
     err instanceof Error &&
-    err.name === "SourceAdapterError" &&
     typeof (err as { code?: unknown }).code === "string" &&
     typeof (err as { statusCode?: unknown }).statusCode === "number"
   );
