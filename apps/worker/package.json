@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@call-ledger/api": "*",
+    "@call-ledger/arkiv": "*",
     "@call-ledger/database": "*",
     "@call-ledger/shared": "*",
     "dotenv": "^16.4.7",

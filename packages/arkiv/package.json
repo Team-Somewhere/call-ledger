@@ -13,7 +13,9 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@call-ledger/shared": "*"
+    "@arkiv-network/sdk": "^1.0.1",
+    "@call-ledger/shared": "*",
+    "viem": "^2.57.16"
   },
   "devDependencies": {
     "@repo/typescript-config": "*",
