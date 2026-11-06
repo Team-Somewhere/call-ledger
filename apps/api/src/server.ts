@@ -17,6 +17,26 @@ const server = app.listen(env.PORT, () => {
 🌟 Creators:    http://localhost:${env.PORT}/api/creators
 ==================================================
   `);
+
+  if (env.DATABASE_URL && env.FIRECRAWL_API_KEY) {
+    void (async () => {
+      try {
+        const { db, creatorSources } = await import("@call-ledger/database");
+        const { eq, and } = await import("drizzle-orm");
+        await db
+          .update(creatorSources)
+          .set({ status: "ACTIVE", updatedAt: new Date() })
+          .where(
+            and(
+              eq(creatorSources.sourceType, "X"),
+              eq(creatorSources.status, "WAITING_FOR_AUTHORIZED_ACCESS"),
+            ),
+          );
+      } catch {
+        // Startup sync optional
+      }
+    })();
+  }
 });
 
 // Graceful shutdown

@@ -83,6 +83,7 @@ export async function createCreator(
     validated,
     userId: req.auth.id,
     createdVia: req.auth.isAdmin ? "MANUAL" : "USER_SUBMISSION",
+    adapter,
   });
 
   sendSuccess(
@@ -282,4 +283,14 @@ export async function getSourceMonitoringOverview(
 ): Promise<void> {
   const overview = await loadSourceOverview();
   sendSuccess(res, overview);
+}
+
+/** POST /api/creators/:id/refresh — trigger an immediate fetch of latest posts. */
+export async function refreshCreator(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const { id } = uuidParamSchema.parse(req.params);
+  const inserted = await creatorSourceService.refreshCreatorPosts(id, registry);
+  sendSuccess(res, { refreshed: true, postsInserted: inserted });
 }

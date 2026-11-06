@@ -30,6 +30,12 @@ creatorRouter.get("/", asyncHandler(socialCreatorController.getCreators));
 // Creator profile (multi-source aware).
 creatorRouter.get("/:id", asyncHandler(socialCreatorController.getCreatorById));
 
+// Immediate refresh of posts for a creator
+creatorRouter.post(
+  "/:id/refresh",
+  asyncHandler(socialCreatorController.refreshCreator),
+);
+
 // Following (off-chain, wallet-scoped).
 creatorRouter.post(
   "/:id/follow",

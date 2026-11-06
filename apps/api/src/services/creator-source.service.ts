@@ -1,6 +1,7 @@
 import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import {
   creatorIdentityLinks,
+  creatorSourcePosts,
   creatorSources,
   creators,
   db,
@@ -8,6 +9,7 @@ import {
 } from "@call-ledger/database";
 import {
   SourceAdapterError,
+  type CreatorSource,
   type CreatorSourceAdapter,
   type CreatorSourceSummary,
   type CreatorSourceType,
@@ -100,6 +102,145 @@ export interface CreateCreatorResult {
   notices: string[];
 }
 
+export async function ingestPostsForSource(
+  sourceId: string,
+  adapter: CreatorSourceAdapter,
+): Promise<number> {
+  const [source] = await db
+    .select()
+    .from(creatorSources)
+    .where(eq(creatorSources.id, sourceId))
+    .limit(1);
+
+  if (!source) return 0;
+
+  const type = source.sourceType as CreatorSourceType;
+  const adapterSource: CreatorSource = {
+    id: source.id,
+    creatorId: source.creatorId,
+    sourceType: type,
+    externalId: source.externalId,
+    handle: source.handle,
+    canonicalUrl: source.canonicalUrl,
+    status: source.status as CreatorSource["status"],
+    verificationStatus:
+      source.verificationStatus as CreatorSource["verificationStatus"],
+    displayName: source.displayName,
+    description: source.description,
+    avatarUrl: source.avatarUrl,
+    lastFetchedAt: source.lastFetchedAt,
+    nextFetchAt: source.nextFetchAt,
+    lastCursor: source.lastCursor,
+    lastError: source.lastError,
+    lastErrorAt: source.lastErrorAt,
+    retryCount: source.retryCount,
+    etag: source.etag,
+    lastModified: source.lastModified,
+    crawlAuthorized: source.crawlAuthorized,
+    providerMeta: source.providerMeta
+      ? JSON.parse(source.providerMeta)
+      : null,
+    createdAt: source.createdAt,
+    updatedAt: source.updatedAt,
+  };
+
+  try {
+    const fetchResult = await adapter.fetchLatestPosts({
+      source: adapterSource,
+      cursor: null,
+      limit: 20,
+    });
+
+    if (!fetchResult.available || fetchResult.posts.length === 0) {
+      return 0;
+    }
+
+    const now = new Date();
+    let inserted = 0;
+
+    for (const post of fetchResult.posts) {
+      const [row] = await db
+        .insert(creatorSourcePosts)
+        .values({
+          creatorSourceId: source.id,
+          externalPostId: post.sourcePostId,
+          sourceType: type,
+          authorExternalId: post.sourceAuthorId,
+          authorHandle: post.authorHandle ?? source.handle,
+          title: post.title?.trim() || null,
+          content: post.text?.trim() || null,
+          canonicalUrl: post.url ?? source.canonicalUrl,
+          publishedAt: post.publishedAt ?? now,
+          fetchedAt: now,
+          contentHash: post.contentHash,
+          mediaUrls: post.mediaUrls ?? [],
+          isReply: post.isReply ?? false,
+          isRepost: post.isRepost ?? false,
+          status: post.status ?? "ACTIVE",
+        })
+        .onConflictDoNothing({
+          target: [
+            creatorSourcePosts.creatorSourceId,
+            creatorSourcePosts.externalPostId,
+          ],
+        })
+        .returning({ id: creatorSourcePosts.id });
+
+      if (row) inserted++;
+    }
+
+    await db
+      .update(creatorSources)
+      .set({
+        lastFetchedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(creatorSources.id, source.id));
+
+    return inserted;
+  } catch (err) {
+    console.error(`Failed to ingest posts for source ${sourceId}:`, err);
+    return 0;
+  }
+}
+
+export async function refreshCreatorPosts(
+  creatorId: string,
+  adapterRegistry: Map<CreatorSourceType, CreatorSourceAdapter>,
+): Promise<number> {
+  const sources = await db
+    .select()
+    .from(creatorSources)
+    .where(
+      and(
+        eq(creatorSources.creatorId, creatorId),
+        or(
+          eq(creatorSources.status, "ACTIVE"),
+          eq(creatorSources.status, "WAITING_FOR_AUTHORIZED_ACCESS"),
+        ),
+      ),
+    );
+
+  let totalInserted = 0;
+  for (const source of sources) {
+    const type = source.sourceType as CreatorSourceType;
+    const adapter = adapterRegistry.get(type);
+    if (!adapter) continue;
+
+    if (source.status === "WAITING_FOR_AUTHORIZED_ACCESS") {
+      await db
+        .update(creatorSources)
+        .set({ status: "ACTIVE", updatedAt: new Date() })
+        .where(eq(creatorSources.id, source.id));
+    }
+
+    const count = await ingestPostsForSource(source.id, adapter);
+    totalInserted += count;
+  }
+
+  return totalInserted;
+}
+
 /**
  * Creates a creator + its first source, or attaches the source to the existing
  * global creator that already owns this identity. Runs in a transaction.
@@ -109,13 +250,29 @@ export async function createCreatorWithSource(params: {
   validated: ValidatedCreatorSource;
   userId: string;
   createdVia?: "USER_SUBMISSION" | "MANUAL";
+  adapter?: CreatorSourceAdapter;
 }): Promise<CreateCreatorResult> {
-  const { validated, userId } = params;
+  const { validated, userId, adapter } = params;
 
   const existingSource = await findSourceByIdentity(validated);
   if (existingSource) {
     // Duplicate source identity: return the existing creator instead of
     // creating a second row for the same creator.
+    if (
+      existingSource.status === "WAITING_FOR_AUTHORIZED_ACCESS" &&
+      validated.status === "ACTIVE"
+    ) {
+      await db
+        .update(creatorSources)
+        .set({ status: "ACTIVE", updatedAt: new Date() })
+        .where(eq(creatorSources.id, existingSource.id));
+      existingSource.status = "ACTIVE";
+    }
+
+    if (adapter) {
+      void ingestPostsForSource(existingSource.id, adapter);
+    }
+
     const creator = await getCreatorDetail(existingSource.creatorId);
     if (!creator) {
       throw new SourceAdapterError(
@@ -189,6 +346,14 @@ export async function createCreatorWithSource(params: {
 
     return { creator, source };
   });
+
+  if (adapter && result.source.status === "ACTIVE") {
+    try {
+      await ingestPostsForSource(result.source.id, adapter);
+    } catch (e) {
+      console.warn("Initial post ingestion notice:", e);
+    }
+  }
 
   const detail = await getCreatorDetail(result.creator.id);
   if (!detail) throw new Error("Creator vanished after creation");

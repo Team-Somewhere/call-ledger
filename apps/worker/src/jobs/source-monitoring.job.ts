@@ -174,15 +174,6 @@ export class SourceMonitoringWorker {
 
     try {
       const type = sourceType(source.sourceType);
-      if (type === "X") {
-        await this.recordSkipped(
-          source,
-          startedAt,
-          "WAITING_FOR_AUTHORIZED_ACCESS",
-        );
-        return;
-      }
-
       const providerMeta = parseProviderMeta(source.providerMeta);
       const adapter = getAdapter(adapterRegistry, type);
       const adapterSource: CreatorSource = {

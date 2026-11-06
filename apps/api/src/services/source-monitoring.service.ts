@@ -61,10 +61,15 @@ export async function getSourceMonitoringOverview(): Promise<SourceMonitoringOve
       adapters: [
         {
           sourceType: "X",
-          ingestionSupported: env.X_INGESTION_ENABLED,
-          description: env.X_INGESTION_ENABLED
-            ? "Authorized X data provider configured."
-            : "X ingestion disabled. Sources are saved as WAITING_FOR_AUTHORIZED_ACCESS.",
+          ingestionSupported: Boolean(
+            env.X_INGESTION_ENABLED ||
+              (env.FIRECRAWL_ENABLED && env.FIRECRAWL_API_KEY),
+          ),
+          description:
+            env.X_INGESTION_ENABLED ||
+            (env.FIRECRAWL_ENABLED && env.FIRECRAWL_API_KEY)
+              ? "Active X post search & monitoring enabled via Firecrawl."
+              : "X ingestion disabled. Configure Firecrawl or an authorized X data provider.",
         },
         {
           sourceType: "BLUESKY",
