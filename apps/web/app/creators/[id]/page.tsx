@@ -4,12 +4,15 @@ import React, { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  Archive,
   ArrowLeft,
   CheckCircle2,
   ExternalLink,
   Loader2,
   RefreshCw,
+  Shield,
   ShieldCheck,
+  TrendingUp,
   UserMinus,
   UserPlus,
 } from "lucide-react";
@@ -18,6 +21,7 @@ import {
   api,
   ApiRequestError,
   type ActivityPost,
+  type ArchivedPost,
   type CreatorDetailResponse,
 } from "../../../lib/api";
 import { useWalletSession } from "../../../lib/use-wallet-session";
@@ -46,6 +50,12 @@ function CreatorProfileContent({ id }: { id: string }) {
   const [postsError, setPostsError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Arkiv archived posts for this creator
+  const [archivedPosts, setArchivedPosts] = useState<ArchivedPost[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedError, setArchivedError] = useState<string | null>(null);
+  const [archivedLoaded, setArchivedLoaded] = useState(false);
+
   const loadPosts = useCallback(async () => {
     try {
       const { data } = await api.creatorPosts(
@@ -70,6 +80,20 @@ function CreatorProfileContent({ id }: { id: string }) {
       const { data } = await api.getCreator(id);
       setCreator(data);
       setError(null);
+      // Load archived posts once creator is loaded, using X handle
+      const xSource = data.sources.find((s) => s.sourceType === "X");
+      if (xSource?.handle && !archivedLoaded) {
+        setArchivedLoading(true);
+        try {
+          const resp = await api.archiveTraderPosts(xSource.handle, "?limit=10");
+          setArchivedPosts(resp.data);
+          setArchivedLoaded(true);
+        } catch {
+          // Archive may not be configured — fail gracefully, no error shown
+        } finally {
+          setArchivedLoading(false);
+        }
+      }
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -77,7 +101,7 @@ function CreatorProfileContent({ id }: { id: string }) {
           : "Could not load creator.",
       );
     }
-  }, [id]);
+  }, [id, archivedLoaded]);
 
   useEffect(() => {
     void load();
@@ -432,6 +456,85 @@ function CreatorProfileContent({ id }: { id: string }) {
                 </article>
               );
             })}
+          </div>
+        )}
+      </section>
+
+      {/* Arkiv Archived Posts */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase text-[#78716C] tracking-widest flex items-center gap-1.5">
+            <Shield className="w-3 h-3 text-[#16A34A]" />
+            // ARKIV ARCHIVED POSTS
+          </div>
+          <Link
+            href={`/archive`}
+            className="text-[10px] text-[#78716C] hover:text-[#171717] transition underline"
+          >
+            View all in archive →
+          </Link>
+        </div>
+
+        {archivedLoading && (
+          <div className="flex items-center gap-2 py-4 text-xs text-[#78716C]">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Loading from Arkiv Rabdi…
+          </div>
+        )}
+
+        {!archivedLoading && archivedLoaded && archivedPosts.length === 0 && (
+          <div className="border border-[#E8DFD1] rounded-sm bg-[#FFFAF3] p-5 text-center text-xs text-[#78716C]">
+            <Archive className="w-5 h-5 mx-auto mb-2" />
+            No posts archived yet for this trader. Posts are archived
+            automatically when the monitoring worker runs.
+          </div>
+        )}
+
+        {!archivedLoading && archivedPosts.length > 0 && (
+          <div className="space-y-3">
+            {archivedPosts.map((post) => (
+              <article
+                key={post.entityKey}
+                className="border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm p-3 text-xs font-mono space-y-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#78716C]">@{post.authorUsername}</span>
+                    {post.tradingRelated && (
+                      <span className="flex items-center gap-0.5 text-[9px] text-[#16A34A] font-bold bg-[#16A34A]/10 px-1.5 py-0.5 rounded-sm">
+                        <TrendingUp className="w-2.5 h-2.5" /> SIGNAL
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-[#78716C]">
+                    {post.capturedAt
+                      ? new Date(post.capturedAt).toLocaleDateString()
+                      : ""}
+                  </span>
+                </div>
+                {post.postText && (
+                  <p className="font-sans text-xs text-[#292524] leading-relaxed whitespace-pre-wrap break-words">
+                    {post.postText}
+                  </p>
+                )}
+                <div className="flex items-center gap-1.5 text-[9px] text-[#78716C] flex-wrap">
+                  <Shield className="w-2.5 h-2.5 text-[#16A34A]" />
+                  <code className="bg-[#E8DFD1]/60 px-1 rounded-sm break-all">
+                    {post.entityKey}
+                  </code>
+                  {post.postUrl && (
+                    <a
+                      href={post.postUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 hover:text-[#171717] ml-auto"
+                    >
+                      source <ExternalLink className="w-2 h-2" />
+                    </a>
+                  )}
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </section>

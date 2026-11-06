@@ -189,6 +189,40 @@ export const api = {
         waitingForAuthorizedAccess: number;
       };
     }>("/monitoring/sources/overview"),
+
+  // --- Archive (Arkiv reads) ---
+  archivePosts: (params: string) =>
+    apiFetch<ArchivedPost[]>(`/archive/posts${params}`),
+
+  archivePost: (entityKey: string) =>
+    apiFetch<ArchivedPost>(`/archive/posts/${encodeURIComponent(entityKey)}`),
+
+  archiveTraderPosts: (username: string, params: string) =>
+    apiFetch<ArchivedPost[]>(`/archive/traders/${encodeURIComponent(username)}/posts${params}`),
+
+  archiveStats: () =>
+    apiFetch<{
+      arkiv: {
+        totalPosts: number;
+        tradingRelatedPosts: number;
+        uniqueTraders: number;
+        oldestPost: string | null;
+        newestPost: string | null;
+      };
+      local: { totalRecords: number; recordsExpiringWithin30Days: number };
+      configured: boolean;
+      source: string;
+    }>("/archive/stats"),
+
+  archiveStatus: () =>
+    apiFetch<{
+      enabled: boolean;
+      arkivConfigured: boolean;
+      arkivWriteConfigured: boolean;
+      trackedXSources: number;
+      activeSources: number;
+      recentArchived: number;
+    }>("/archive/status"),
 };
 
 export interface SourceSummary {
@@ -324,4 +358,30 @@ export interface CreateCreatorResponse {
   source: SourceSummary;
   notices: string[];
   alreadyExisted: boolean;
+}
+
+export interface ArchivedPost {
+  entityKey: string;
+  txHash: string | null;
+  ownerAddress: string | null;
+  expiresAt: string | null;
+  sourcePlatform: string;
+  sourcePostId: string;
+  authorUsername: string;
+  authorDisplayName: string;
+  postText: string;
+  postUrl: string;
+  originalCreatedAt: string | null;
+  capturedAt: string;
+  contentFidelity: string;
+  captureProvider: string;
+  tradingRelated: boolean;
+  topics: string[];
+  assets: string[];
+  schemaVersion: string;
+  // Enrichment from local DB
+  localId?: string;
+  localTxHash?: string | null;
+  creatorDisplayName?: string | null;
+  creatorId?: string | null;
 }

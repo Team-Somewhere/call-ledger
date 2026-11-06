@@ -1,18 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowUpRight,
-  Check,
+  ExternalLink,
+  Loader2,
   Search,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  Zap,
 } from "lucide-react";
 import { CreateStrategyModal } from "../components/create-strategy-modal";
 import { SignalCard } from "../components/signal-card";
+import { SourceBadge } from "../components/source-badge";
+import { api, type ActivityPost, type CreatorListItem } from "../lib/api";
 import { MOCK_CREATORS, MOCK_SIGNALS, MockSignal } from "../lib/mock-data";
 
 export default function TerminalPage() {
@@ -23,10 +21,73 @@ export default function TerminalPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSignal, setSelectedSignal] = useState<MockSignal | null>(null);
 
+  // Real platform creators + their posts
+  const [platformCreators, setPlatformCreators] = useState<CreatorListItem[] | null>(null);
+  const [platformPosts, setPlatformPosts] = useState<ActivityPost[] | null>(null);
+  const [postsLoading, setPostsLoading] = useState(true);
+
+  const loadPlatformFeed = useCallback(async () => {
+    setPostsLoading(true);
+    try {
+      const { data: creators } = await api.listCreators("?limit=50");
+      setPlatformCreators(creators);
+
+      if (creators.length > 0) {
+        // Fetch posts from all platform creators in parallel (up to 10 most recent)
+        const postResults = await Promise.allSettled(
+          creators.map((c) => api.creatorPosts(c.id, "?limit=10"))
+        );
+        const allPosts: ActivityPost[] = [];
+        for (const result of postResults) {
+          if (result.status === "fulfilled") {
+            allPosts.push(...result.value.data);
+          }
+        }
+        // Sort newest first
+        allPosts.sort((a, b) => {
+          const ta = new Date(a.publishedAt ?? a.fetchedAt).getTime();
+          const tb = new Date(b.publishedAt ?? b.fetchedAt).getTime();
+          return tb - ta;
+        });
+        setPlatformPosts(allPosts);
+      } else {
+        setPlatformPosts([]);
+      }
+    } catch {
+      // API unavailable — fall back to mock
+      setPlatformCreators(null);
+      setPlatformPosts(null);
+    } finally {
+      setPostsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPlatformFeed();
+  }, [loadPlatformFeed]);
+
   const handleCopy = (signal: MockSignal) => {
     setSelectedSignal(signal);
     setIsModalOpen(true);
   };
+
+  // Determine what to show in the feed:
+  // - If API returned posts (even empty), show real posts from real creators
+  // - If API failed (null), fall back to mock signals
+  const useRealFeed = platformPosts !== null;
+  const hasPlatformCreators = platformCreators && platformCreators.length > 0;
+
+  // For real feed: filter by feedSearch
+  const filteredPosts = (platformPosts ?? []).filter((post) => {
+    if (!feedSearch) return true;
+    const q = feedSearch.toLowerCase();
+    return (
+      post.creatorName.toLowerCase().includes(q) ||
+      (post.authorHandle ?? "").toLowerCase().includes(q) ||
+      (post.content ?? "").toLowerCase().includes(q) ||
+      (post.title ?? "").toLowerCase().includes(q)
+    );
+  });
 
   const trendingTickers = [
     { rank: 1, symbol: "$BTC", sentiment: "MIXED", count: "22 CALLS" },
@@ -35,6 +96,17 @@ export default function TerminalPage() {
     { rank: 4, symbol: "$MSTR", sentiment: "LONG", count: "2 CALLS" },
     { rank: 5, symbol: "$AVAX", sentiment: "SHORT", count: "2 CALLS" },
   ];
+
+  // Format relative time
+  function relativeTime(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h`;
+    return `${Math.floor(h / 24)}d`;
+  }
 
   return (
     <div className="space-y-6">
@@ -57,8 +129,8 @@ export default function TerminalPage() {
 
       {/* 3-Column Terminal Layout inspired by KOLLATERAL */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Column 1: Left Filter & Terminal Stats (3 cols) */}
-        <div className="lg:col-span-3 space-y-5 font-mono">
+        {/* Column 1: Left Filter & Terminal Stats (2 cols) */}
+        <div className="lg:col-span-2 space-y-5 font-mono">
           <div>
             <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
               // LIVE FEED
@@ -152,8 +224,8 @@ export default function TerminalPage() {
           </div>
         </div>
 
-        {/* Column 2: Center Live Calls Feed (6 cols) */}
-        <div className="lg:col-span-6 space-y-4 font-mono">
+        {/* Column 2: Center Live Calls Feed (7 cols) */}
+        <div className="lg:col-span-7 space-y-4 font-mono">
           {/* Feed Header */}
           <div className="flex items-center justify-between pb-2 border-b border-[#E8DFD1] text-xs">
             <div className="flex items-center gap-2">
@@ -165,19 +237,118 @@ export default function TerminalPage() {
               </span>
             </div>
             <span className="text-[11px] text-[#78716C]">
-              {MOCK_SIGNALS.length} signals
+              {useRealFeed
+                ? `${filteredPosts.length} post${filteredPosts.length !== 1 ? "s" : ""}`
+                : `${MOCK_SIGNALS.length} signals`}
             </span>
           </div>
 
           {/* Feed Cards */}
           <div className="space-y-4">
-            {MOCK_SIGNALS.map((signal) => (
-              <SignalCard
-                key={signal.id}
-                signal={signal}
-                onDeployStrategy={handleCopy}
-              />
-            ))}
+            {postsLoading ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-xs text-[#78716C]">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading platform feed…
+              </div>
+            ) : useRealFeed && hasPlatformCreators ? (
+              filteredPosts.length === 0 ? (
+                <div className="border border-[#E8DFD1] rounded-sm bg-[#FFFAF3] p-8 text-center font-mono">
+                  <div className="text-sm font-bold text-[#171717]">No posts yet</div>
+                  <p className="mt-1 font-sans text-xs text-[#78716C]">
+                    Platform creators have no collected posts yet. Check back soon.
+                  </p>
+                </div>
+              ) : (
+                filteredPosts.map((post) => {
+                  const timeAgo = relativeTime(post.publishedAt ?? post.fetchedAt);
+                  return (
+                    <article
+                      key={post.id}
+                      className="bg-[#FFFAF3] border border-[#E8DFD1] rounded-sm p-4 text-xs font-mono transition hover:border-[#171717]"
+                    >
+                      {/* Post Header */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-[#E8DFD1]">
+                        <div className="flex items-center gap-2">
+                          {post.creatorAvatarUrl ? (
+                            <img
+                              src={post.creatorAvatarUrl}
+                              alt={post.creatorName}
+                              className="w-7 h-7 rounded-full object-cover border border-[#E8DFD1] grayscale"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-[#FFF2DB] border border-[#E8DFD1] flex items-center justify-center text-[#78716C] shrink-0 text-[10px] font-bold">
+                              {post.creatorName.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-[#171717]">
+                              {post.creatorName}
+                            </span>
+                            {(post.authorHandle || post.sourceHandle) && (
+                              <span className="text-[#78716C] text-[11px]">
+                                @{(post.authorHandle ?? post.sourceHandle ?? "").replace(/^@/, "")}
+                              </span>
+                            )}
+                            <span className="text-[#78716C] text-[10px]">• {timeAgo}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <SourceBadge sourceType={post.sourceType} />
+                          {post.canonicalUrl && (
+                            <a
+                              href={post.canonicalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-[#78716C] hover:text-[#171717] flex items-center gap-0.5"
+                            >
+                              VIEW <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Post Body */}
+                      {post.title && (
+                        <h2 className="mt-3 text-sm font-bold text-[#171717] font-sans">
+                          {post.title}
+                        </h2>
+                      )}
+                      {post.content && (
+                        <p className="mt-2 font-sans text-sm leading-relaxed text-[#292524] whitespace-pre-wrap break-words">
+                          {post.content}
+                        </p>
+                      )}
+
+                      {/* Post Meta */}
+                      {(post.isReply || post.isRepost) && (
+                        <div className="mt-2 flex gap-2 text-[10px] text-[#78716C]">
+                          {post.isReply && <span>REPLY</span>}
+                          {post.isRepost && <span>REPOST</span>}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })
+              )
+            ) : useRealFeed && !hasPlatformCreators ? (
+              <div className="border border-[#E8DFD1] rounded-sm bg-[#FFFAF3] p-8 text-center font-mono">
+                <div className="text-sm font-bold text-[#171717]">No creators on platform</div>
+                <p className="mt-1 font-sans text-xs text-[#78716C]">
+                  Add creators on the{" "}
+                  <Link href="/discover" className="underline text-[#171717]">Discover</Link>{" "}
+                  page to see their posts here.
+                </p>
+              </div>
+            ) : (
+              /* Fallback: mock signals */
+              MOCK_SIGNALS.map((signal) => (
+                <SignalCard
+                  key={signal.id}
+                  signal={signal}
+                  onDeployStrategy={handleCopy}
+                />
+              ))
+            )}
           </div>
         </div>
 
