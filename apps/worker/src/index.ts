@@ -3,83 +3,77 @@ import {
   closeDatabaseConnection,
 } from "@call-ledger/database";
 import { env } from "./config/env";
-import { futureWorkerJobs } from "./jobs/placeholder";
+import { WorkerPollingService } from "./jobs/creator-polling.job";
+import { SourceMonitoringWorker } from "./jobs/source-monitoring.job";
 import { logger } from "./services/logger";
 
-let isShuttingDown = false;
-let heartbeatTimer: NodeJS.Timeout | null = null;
+const worker = new SourceMonitoringWorker();
+const legacyMaintenance = new WorkerPollingService();
+let activeCycle: Promise<number> | null = null;
+let cycleTimer: NodeJS.Timeout | null = null;
+let maintenanceTimer: NodeJS.Timeout | null = null;
+let shuttingDown = false;
 
-async function startWorker() {
-  console.log(`
-==================================================
-⚙️  CallLedger Background Worker
-==================================================
-📍 Environment:        ${env.NODE_ENV}
-⏱️  Heartbeat Cadence:  ${env.WORKER_HEARTBEAT_INTERVAL_MS}ms
-📋 Registered Jobs:    ${futureWorkerJobs.length} (Phase 2-6 queued)
-==================================================
-  `);
-
-  logger.info("Initializing background worker process...");
-
-  // Database probe check
+async function poll(): Promise<void> {
+  if (shuttingDown || activeCycle) return;
+  activeCycle = worker.runOnce();
   try {
-    const dbStatus = await checkDatabaseHealth();
-    if (dbStatus.connected) {
-      logger.info("Connected to PostgreSQL database successfully", {
-        latencyMs: dbStatus.latencyMs,
-      });
-    } else {
-      logger.warn(
-        "Database is currently not connected or DATABASE_URL is not configured",
-        { error: dbStatus.error },
-      );
-    }
-  } catch (err) {
-    logger.warn(
-      "Initial database probe check failed; worker running in standalone mode",
-      {
-        error: err instanceof Error ? err.message : String(err),
-      },
+    const claimed = await activeCycle;
+    if (claimed > 0)
+      logger.info(`Processed ${claimed} globally monitored sources.`);
+  } catch (error) {
+    logger.error(
+      "Monitoring worker cycle failed",
+      error instanceof Error ? error.message : "Unexpected worker error",
+    );
+  } finally {
+    activeCycle = null;
+  }
+}
+
+async function start(): Promise<void> {
+  logger.info(
+    `Starting source monitoring worker (${env.MONITORING_WORKER_ENABLED ? "enabled" : "disabled"}).`,
+  );
+  const health = await checkDatabaseHealth();
+  if (!health.connected) {
+    throw new Error(
+      `PostgreSQL connection failed: ${health.error ?? "unknown error"}`,
     );
   }
 
-  // Periodic heartbeat loop
-  heartbeatTimer = setInterval(() => {
-    if (isShuttingDown) return;
-    logger.info(
-      "Worker heartbeat check: idle state healthy, awaiting job queue triggers.",
-    );
-  }, env.WORKER_HEARTBEAT_INTERVAL_MS);
+  maintenanceTimer = setInterval(
+    () => void legacyMaintenance.cleanupExpiredOAuth(),
+    10 * 60 * 1000,
+  );
+  if (!env.MONITORING_WORKER_ENABLED) return;
+  await poll();
+  cycleTimer = setInterval(
+    () => void poll(),
+    env.MONITORING_WORKER_INTERVAL_MS,
+  );
 }
 
-// Graceful shutdown handling
-async function handleShutdown(signal: string) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-
-  logger.info(`Received ${signal}. Gracefully stopping worker tasks...`);
-
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
-
-  try {
-    await closeDatabaseConnection();
-    logger.info("Closed database connection pool.");
-  } catch (err) {
-    logger.error("Error closing database connection", err);
-  }
-
-  logger.info("Worker process terminated cleanly.");
-  process.exit(0);
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  worker.stop();
+  if (cycleTimer) clearInterval(cycleTimer);
+  if (maintenanceTimer) clearInterval(maintenanceTimer);
+  logger.info(`Received ${signal}; waiting for the active monitoring cycle.`);
+  await activeCycle;
+  await closeDatabaseConnection();
+  logger.info("Monitoring worker stopped.");
 }
 
-process.on("SIGINT", () => handleShutdown("SIGINT"));
-process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
-startWorker().catch((err) => {
-  logger.error("Fatal worker startup error", err);
-  process.exit(1);
+start().catch(async (error: unknown) => {
+  logger.error(
+    "Fatal monitoring worker startup error",
+    error instanceof Error ? error.message : "Unexpected startup error",
+  );
+  await closeDatabaseConnection();
+  process.exitCode = 1;
 });
