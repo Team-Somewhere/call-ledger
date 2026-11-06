@@ -273,3 +273,326 @@
   .cl-grid { grid-template-columns: 1fr; }
   .cl-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Suppress Twitter's native tooltip when CallLedger overlay is active */
+body.cl-overlay-active div[role="tooltip"],
+body.cl-overlay-active div[data-testid="HoverCard"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Rich Token Popover Overlay (matching X crypto search card) */
+.cl-overlay-container {
+  box-sizing: border-box;
+  pointer-events: auto !important;
+  position: relative;
+}
+
+/* Invisible hover bridge to eliminate dead-zones between cashtag and card */
+.cl-overlay-container::before {
+  content: "";
+  position: absolute;
+  top: -24px;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: transparent;
+  pointer-events: auto !important;
+}
+
+.cl-definitive-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(0, 229, 153, 0.14);
+  border: 1px solid rgba(0, 229, 153, 0.45);
+  color: #00e599;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.cl-definitive-badge__icon {
+  font-size: 11px;
+}
+
+.cl-rich-card__definitive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #00e599 0%, #059669 100%);
+  color: #000000;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 120ms ease;
+  box-shadow: 0 2px 8px rgba(0, 229, 153, 0.25);
+  text-decoration: none;
+}
+
+.cl-rich-card__definitive-btn:hover {
+  background: linear-gradient(135deg, #10f0a5 0%, #047857 100%);
+  box-shadow: 0 4px 14px rgba(0, 229, 153, 0.4);
+  transform: translateY(-1px);
+}
+
+.cl-rich-card {
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 16px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.3);
+  padding: 16px 20px 14px;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+  animation: clCardPop 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes clCardPop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.cl-rich-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.cl-rich-card__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cl-rich-card__logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #16181c;
+}
+
+.cl-rich-card__logo-fallback {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #1d9bf0;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.05em;
+}
+
+.cl-rich-card__titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.cl-rich-card__name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.cl-rich-card__subtitle {
+  font-size: 13px;
+  color: #71767b;
+  margin-top: 2px;
+}
+
+.cl-rich-card__close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #71767b;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.cl-rich-card__close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.cl-rich-card__pricing {
+  margin-top: 8px;
+  margin-bottom: 6px;
+}
+
+.cl-rich-card__price {
+  font-size: 34px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.cl-rich-card__delta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.cl-rich-card__delta--up {
+  color: #00ba7c;
+  font-weight: 600;
+}
+
+.cl-rich-card__delta--down {
+  color: #f4212e;
+  font-weight: 600;
+}
+
+.cl-rich-card__time {
+  color: #71767b;
+  font-weight: 400;
+}
+
+.cl-rich-card__chart-box {
+  width: 100%;
+  height: 190px;
+  position: relative;
+  margin-top: 8px;
+}
+
+.cl-rich-card__canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.cl-rich-card__chart-loading {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11px;
+  color: #71767b;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+.cl-rich-card__ranges {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-bottom: 2px;
+}
+
+.cl-rich-card__range-btn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: #71767b;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.cl-rich-card__range-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #eff3f4;
+}
+
+.cl-rich-card__range-btn--active {
+  background: #202327;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.cl-rich-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+}
+
+.cl-rich-card__link {
+  color: #1d9bf0;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.cl-rich-card__link:hover {
+  text-decoration: underline;
+}
+
+.cl-rich-card__analyze-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(245, 185, 78, 0.12);
+  color: #f5b94e;
+  border: 1px solid rgba(245, 185, 78, 0.4);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.cl-rich-card__analyze-btn:hover {
+  background: rgba(245, 185, 78, 0.25);
+}
+
+.cl-rich-card__state {
+  height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #71767b;
+  font-size: 13px;
+}
+
+.cl-rich-card__spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #1d9bf0;
+  border-radius: 50%;
+  animation: clSpin 0.7s linear infinite;
+}
+
+@keyframes clSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
