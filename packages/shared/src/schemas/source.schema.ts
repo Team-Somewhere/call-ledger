@@ -60,26 +60,10 @@ export const safeUrlSchema = z
     }
   }, { message: "Must be a valid http(s) URL" });
 
-export const resolveCreatorSourceSchema = z.discriminatedUnion("sourceType", [
-  z.object({
-    sourceType: z.literal("X"),
-    username: xHandleSchema,
-  }),
-  z.object({
-    sourceType: z.literal("BLUESKY"),
-    handle: blueskyHandleSchema,
-  }),
-  z.object({
-    sourceType: z.literal("RSS"),
-    feedUrl: safeUrlSchema,
-  }),
-  z.object({
-    sourceType: z.literal("WEBSITE"),
-    websiteUrl: safeUrlSchema,
-    authorized: z.boolean(),
-    maxPages: z.number().int().min(1).max(50).optional(),
-  }),
-]);
+export const resolveCreatorSourceSchema = z.object({
+  sourceType: z.literal("X"),
+  username: xHandleSchema,
+});
 
 export type ResolveCreatorSourceInput = z.infer<
   typeof resolveCreatorSourceSchema
@@ -87,30 +71,11 @@ export type ResolveCreatorSourceInput = z.infer<
 
 export const createCreatorWithSourceSchema = resolveCreatorSourceSchema;
 
-export const addCreatorSourceSchema = z.discriminatedUnion("sourceType", [
-  z.object({
-    creatorId: z.string().uuid(),
-    sourceType: z.literal("X"),
-    username: xHandleSchema,
-  }),
-  z.object({
-    creatorId: z.string().uuid(),
-    sourceType: z.literal("BLUESKY"),
-    handle: blueskyHandleSchema,
-  }),
-  z.object({
-    creatorId: z.string().uuid(),
-    sourceType: z.literal("RSS"),
-    feedUrl: safeUrlSchema,
-  }),
-  z.object({
-    creatorId: z.string().uuid(),
-    sourceType: z.literal("WEBSITE"),
-    websiteUrl: safeUrlSchema,
-    authorized: z.boolean(),
-    maxPages: z.number().int().min(1).max(50).optional(),
-  }),
-]);
+export const addCreatorSourceSchema = z.object({
+  creatorId: z.string().uuid(),
+  sourceType: z.literal("X"),
+  username: xHandleSchema,
+});
 
 export const creatorSourceQuerySchema = z.object({
   page: z

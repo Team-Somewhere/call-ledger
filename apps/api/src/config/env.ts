@@ -50,6 +50,9 @@ const envSchema = z.object({
   ARKIV_ACCESS_KEY: z.string().optional(),
   ARKIV_RPC_URL: z.string().optional(),
 
+  // Worker status endpoint (used by monitoring/status to reach the worker)
+  WORKER_STATUS_URL: z.string().optional().default("http://localhost:8001/status"),
+
   // Wallet auth session lifetime (nonce TTL in milliseconds)
   WALLET_NONCE_TTL_MS: z
     .string()

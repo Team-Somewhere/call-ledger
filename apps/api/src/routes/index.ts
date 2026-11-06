@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authRouter } from "./auth.routes";
 import { archiveRouter } from "./archive.routes";
+import { arkivTransactionsRouter } from "./arkiv-transactions.routes";
 import { creatorRouter } from "./creator.routes";
 import { creatorSourceRouter, meRouter } from "./creator-source.routes";
 import { healthRouter } from "./health.routes";
@@ -21,3 +22,4 @@ apiRouter.use("/integrations/x", oauthRouter);
 apiRouter.use("/monitoring", monitoringRouter);
 apiRouter.use("/posts", postRouter);
 apiRouter.use("/archive", archiveRouter);
+apiRouter.use("/arkiv/transactions", arkivTransactionsRouter);

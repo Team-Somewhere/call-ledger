@@ -44,20 +44,7 @@ export async function resolveSourceInput(
 function adapterInputFromResolveInput(
   input: ResolveCreatorSourceInput,
 ): unknown {
-  switch (input.sourceType) {
-    case "X":
-      return input.username;
-    case "BLUESKY":
-      return input.handle;
-    case "RSS":
-      return input.feedUrl;
-    case "WEBSITE":
-      return {
-        url: input.websiteUrl,
-        authorized: input.authorized,
-        maxPages: input.maxPages,
-      };
-  }
+  return input.username;
 }
 
 export function toAdapterInput(input: ResolveCreatorSourceInput): unknown {
