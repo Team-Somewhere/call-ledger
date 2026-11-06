@@ -10,12 +10,12 @@ This repository is organized as a Turborepo monorepo powered by npm workspaces.
 call-ledger/
 │
 ├── apps/
-│   ├── web/                     # Next.js 16 App Router frontend (Tailwind CSS, dark theme)
-│   ├── api/                     # Express 5 REST backend (PostgreSQL, Drizzle ORM, Zod)
-│   └── worker/                  # Background worker (scheduled jobs, heartbeat, ingestion)
+│   ├── web/                     # Next.js 16 App Router frontend (Tailwind CSS, discovery & dossier interfaces)
+│   ├── api/                     # Express 5 REST backend (PostgreSQL, Drizzle ORM, X API, OAuth 2.0 PKCE)
+│   └── worker/                  # PostgreSQL-backed global source polling worker
 │
 ├── packages/
-│   ├── database/                # PostgreSQL schema (Drizzle ORM), connection pool, migrations
+│   ├── database/                # PostgreSQL schema (Drizzle ORM), connection pool, migrations (0000, 0001)
 │   ├── shared/                  # Isomorphic TypeScript types, constants, and Zod validation schemas
 │   ├── arkiv/                   # Architectural interfaces & documentation for on-chain attestations
 │   ├── definitive/              # Architectural interfaces & documentation for Definitive Flash execution
@@ -28,6 +28,33 @@ call-ledger/
 ├── package.json                 # Monorepo root configuration & scripts
 └── turbo.json                   # Turborepo task orchestration pipeline
 ```
+
+---
+
+## Phase 2: Creator Discovery & X Integration
+
+Phase 2 introduces a 3-stage creator management lifecycle and post ingestion pipeline:
+
+1. **Stage 1 — Discovery & Identity Resolution**: Look up accounts via official X API v2 by handle, verify uniqueness against stable numeric `x_user_id`, and onboard into `DISCOVERED` status without automatic polling.
+2. **Stage 2 — Qualification & Account Ownership Verification**:
+   - Multi-criteria weighted 0–100 rubric (Signal clarity 25%, Trading activity 15%, Track record 25%, Consistency 15%, Verifiability 20%).
+   - OAuth 2.0 Authorization Code Flow with PKCE (`tweet.read`, `users.read`, `offline.access`) to verify creator account ownership. Tokens are encrypted at rest with AES-256-GCM.
+3. **Stage 3 — Source Monitoring**:
+   - The standalone Phase 2B worker polls global RSS, Bluesky, and authorized website sources with PostgreSQL leases and idempotent normalized post storage.
+   - The older X-specific polling services remain for compatibility, but are not scheduled by the current worker. X stays disabled until an authorized provider is implemented.
+
+---
+
+## Phase 2B — Global Creator Source Monitoring
+
+RSS/Atom, Bluesky, and explicitly authorized Firecrawl website sources are
+polled globally by the standalone worker. Normalized posts are deduplicated and
+stored once; every follower reads those shared rows through the authenticated
+activity feed. X ingestion remains disabled without an authorized provider.
+
+See [Phase 2B source monitoring](./docs/phase-2b-source-monitoring.md) for
+scheduling, retries, source locks, environment variables, API routes, and run
+commands.
 
 ---
 
@@ -112,7 +139,8 @@ npm run dev
 
 ## Database Architecture
 
-11 PostgreSQL tables created with UUID primary keys, explicit decimal numeric precision, foreign keys, and indexes:
+PostgreSQL tables use UUID primary keys, explicit decimal numeric precision,
+foreign keys, and indexes. The original trading tables include:
 
 1. `users`: User profiles and authentication records.
 2. `wallets`: User-linked EVM and Solana wallet addresses.
