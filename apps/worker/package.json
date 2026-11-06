@@ -7,9 +7,11 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/tests/*.test.ts"
   },
   "dependencies": {
+    "@call-ledger/api": "*",
     "@call-ledger/database": "*",
     "@call-ledger/shared": "*",
     "dotenv": "^16.4.7",
