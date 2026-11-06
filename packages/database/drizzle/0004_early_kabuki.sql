@@ -1,0 +1,1 @@
+ALTER TABLE "creator_source_posts" ALTER COLUMN "published_at" DROP NOT NULL;

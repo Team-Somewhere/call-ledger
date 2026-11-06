@@ -1,15 +1,25 @@
 import { relations } from "drizzle-orm";
 import { arkivRecords } from "./arkiv-records";
+import { creatorDiscoverySources } from "./creator-discovery-sources";
 import { creatorFollows } from "./creator-follows";
+import { creatorIdentityLinks } from "./creator-identity-links";
 import { creatorMetrics } from "./creator-metrics";
+import { creatorMonitoring } from "./creator-monitoring";
+import { creatorPollLogs } from "./creator-poll-logs";
+import { creatorSources } from "./creator-sources";
 import { creators } from "./creators";
+import { oauthStates } from "./oauth-states";
 import { orders } from "./orders";
 import { positions } from "./positions";
 import { signalVerifications } from "./signal-verifications";
 import { signals } from "./signals";
+import { sourcePosts } from "./source-posts";
 import { strategies } from "./strategies";
+import { userCreatorFollows } from "./user-creator-follows";
 import { users } from "./users";
+import { walletNonces } from "./wallet-nonces";
 import { wallets } from "./wallets";
+import { xAccountConnections } from "./x-account-connections";
 
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
@@ -17,6 +27,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   strategies: many(strategies),
   orders: many(orders),
   positions: many(positions),
+  xAccountConnections: many(xAccountConnections),
+  oauthStates: many(oauthStates),
+  userCreatorFollows: many(userCreatorFollows),
+  walletNonces: many(walletNonces),
 }));
 
 export const walletsRelations = relations(wallets, ({ one }) => ({
@@ -35,6 +49,16 @@ export const creatorsRelations = relations(creators, ({ one, many }) => ({
   strategies: many(strategies),
   signals: many(signals),
   arkivRecords: many(arkivRecords),
+  monitoring: one(creatorMonitoring, {
+    fields: [creators.id],
+    references: [creatorMonitoring.creatorId],
+  }),
+  sourcePosts: many(sourcePosts),
+  discoverySources: many(creatorDiscoverySources),
+  pollLogs: many(creatorPollLogs),
+  sources: many(creatorSources),
+  identityLinks: many(creatorIdentityLinks),
+  userFollows: many(userCreatorFollows),
 }));
 
 export const creatorMetricsRelations = relations(creatorMetrics, ({ one }) => ({
@@ -122,5 +146,115 @@ export const arkivRecordsRelations = relations(arkivRecords, ({ one }) => ({
   signal: one(signals, {
     fields: [arkivRecords.relatedSignalId],
     references: [signals.id],
+  }),
+}));
+
+// Phase 2 relations
+export const xAccountConnectionsRelations = relations(
+  xAccountConnections,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [xAccountConnections.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const oauthStatesRelations = relations(oauthStates, ({ one }) => ({
+  user: one(users, {
+    fields: [oauthStates.userId],
+    references: [users.id],
+  }),
+}));
+
+export const creatorMonitoringRelations = relations(
+  creatorMonitoring,
+  ({ one }) => ({
+    creator: one(creators, {
+      fields: [creatorMonitoring.creatorId],
+      references: [creators.id],
+    }),
+  }),
+);
+
+export const sourcePostsRelations = relations(sourcePosts, ({ one }) => ({
+  creator: one(creators, {
+    fields: [sourcePosts.creatorId],
+    references: [creators.id],
+  }),
+}));
+
+export const creatorDiscoverySourcesRelations = relations(
+  creatorDiscoverySources,
+  ({ one }) => ({
+    creator: one(creators, {
+      fields: [creatorDiscoverySources.creatorId],
+      references: [creators.id],
+    }),
+  }),
+);
+
+export const creatorPollLogsRelations = relations(
+  creatorPollLogs,
+  ({ one }) => ({
+    creator: one(creators, {
+      fields: [creatorPollLogs.creatorId],
+      references: [creators.id],
+    }),
+  }),
+);
+
+// Phase 2A relations
+export const creatorSourcesRelations = relations(
+  creatorSources,
+  ({ one, many }) => ({
+    creator: one(creators, {
+      fields: [creatorSources.creatorId],
+      references: [creators.id],
+    }),
+    identityLink: one(creatorIdentityLinks, {
+      fields: [creatorSources.id],
+      references: [creatorIdentityLinks.creatorSourceId],
+    }),
+    follows: many(userCreatorFollows),
+  }),
+);
+
+export const creatorIdentityLinksRelations = relations(
+  creatorIdentityLinks,
+  ({ one }) => ({
+    creator: one(creators, {
+      fields: [creatorIdentityLinks.creatorId],
+      references: [creators.id],
+    }),
+    source: one(creatorSources, {
+      fields: [creatorIdentityLinks.creatorSourceId],
+      references: [creatorSources.id],
+    }),
+    verifiedBy: one(users, {
+      fields: [creatorIdentityLinks.verifiedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const userCreatorFollowsRelations = relations(
+  userCreatorFollows,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userCreatorFollows.userId],
+      references: [users.id],
+    }),
+    creator: one(creators, {
+      fields: [userCreatorFollows.creatorId],
+      references: [creators.id],
+    }),
+  }),
+);
+
+export const walletNoncesRelations = relations(walletNonces, ({ one }) => ({
+  user: one(users, {
+    fields: [walletNonces.userId],
+    references: [users.id],
   }),
 }));

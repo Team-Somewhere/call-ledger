@@ -8,6 +8,34 @@
       "when": 1793912302755,
       "tag": "0000_slim_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793914952880,
+      "tag": "0001_petite_thena",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793935735914,
+      "tag": "0002_smiling_betty_brant",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793938096819,
+      "tag": "0003_phase2b_source_monitoring",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793939395185,
+      "tag": "0004_early_kabuki",
+      "breakpoints": true
     }
   ]
 }
