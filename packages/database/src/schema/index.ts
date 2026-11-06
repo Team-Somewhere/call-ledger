@@ -25,3 +25,5 @@ export * from "./relations";
 // Phase 2B: monitoring ingestion
 export * from "./creator-source-posts";
 export * from "./creator-monitoring-logs";
+// Phase 3: Arkiv transaction history
+export * from "./arkiv-transactions";
