@@ -1,3 +1,15 @@
+import type {
+  FlashQuoteRequestInput,
+  FlashSubmitOrderRequestInput,
+  Order,
+  OrderStatus,
+  VerifiedAsset,
+} from "@call-ledger/shared";
+import type {
+  FlashQuoteResponse,
+  FlashOrderStatusResponse,
+} from "@call-ledger/definitive";
+
 /**
  * Browser API client.
  *
@@ -71,9 +83,17 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok || !payload?.success) {
+    const rawMessage = payload?.error?.message;
+    const errorMessage =
+      typeof rawMessage === "string"
+        ? rawMessage
+        : typeof rawMessage === "object" && rawMessage !== null
+          ? JSON.stringify(rawMessage)
+          : `Request failed with status ${res.status}`;
+
     throw new ApiRequestError(
       payload?.error?.code ?? "REQUEST_FAILED",
-      payload?.error?.message ?? `Request failed with status ${res.status}`,
+      errorMessage,
       res.status,
     );
   }
@@ -255,6 +275,34 @@ export const api = {
       "/monitoring/run-now",
       { method: "POST" },
     ),
+
+  // Definitive Flash trading
+  getOrderConfig: () =>
+    apiFetch<{
+      configured: boolean;
+      supportedChains: Record<string, { name: string; chainId: number; explorerBaseUrl: string }>;
+      verifiedAssets: Record<string, Record<string, VerifiedAsset>>;
+    }>("/orders/config"),
+
+  requestQuote: (payload: FlashQuoteRequestInput) =>
+    apiFetch<FlashQuoteResponse>("/orders/quote", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  submitOrder: (payload: FlashSubmitOrderRequestInput) =>
+    apiFetch<{ order: Order; flashResponse: { orderId: string; status: OrderStatus } }>(
+      "/orders/submit",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    ),
+
+  getOrder: (orderId: string) =>
+    apiFetch<{ order: Order; flashStatus?: FlashOrderStatusResponse }>(`/orders/${orderId}`),
+
+  getOrders: () => apiFetch<Order[]>("/orders"),
 };
 
 export interface SourceSummary {
