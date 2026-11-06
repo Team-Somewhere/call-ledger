@@ -21,9 +21,6 @@ import { useWalletSession } from "../lib/use-wallet-session";
 
 export default function TerminalPage() {
   const { isAuthenticated, connect } = useWalletSession();
-  const [filter, setFilter] = useState<
-    "ALL" | "SIGNALS_ONLY" | "HIGH_CONVICTION"
-  >("SIGNALS_ONLY");
   const [feedSearch, setFeedSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedSignal, setSelectedSignal] = useState<MockSignal | null>(null);
@@ -306,84 +303,6 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Search feed input */}
-          <div>
-            <div className="text-[10px] uppercase text-[#78716C] mb-1">
-              SEARCH FEED
-            </div>
-            <input
-              type="text"
-              placeholder="handle, ticker, text"
-              className="w-full bg-[#FFFAF3] border border-[#E8DFD1] rounded-sm px-2.5 py-1.5 text-xs text-[#171717] placeholder-[#78716C] focus:outline-none focus:border-[#171717]"
-            />
-          </div>
-
-          {/* Filter Pills */}
-          <div className="space-y-1">
-            <div className="text-[10px] uppercase text-[#78716C] mb-1">
-              FILTER
-            </div>
-            <button
-              onClick={() => setFilter("ALL")}
-              className={`w-full text-left px-3 py-1.5 rounded-sm text-xs font-mono transition ${
-                filter === "ALL"
-                  ? "bg-[#171717] text-[#FFFAF3] font-semibold"
-                  : "text-[#78716C] hover:text-[#171717] hover:bg-[#FFF2DB]/60"
-              }`}
-            >
-              All calls
-            </button>
-            <button
-              onClick={() => setFilter("SIGNALS_ONLY")}
-              className={`w-full text-left px-3 py-1.5 rounded-sm text-xs font-mono transition ${
-                filter === "SIGNALS_ONLY"
-                  ? "bg-[#171717] text-[#FFFAF3] font-semibold"
-                  : "text-[#78716C] hover:text-[#171717] hover:bg-[#FFF2DB]/60"
-              }`}
-            >
-              Signals only
-            </button>
-            <button
-              onClick={() => setFilter("HIGH_CONVICTION")}
-              className={`w-full text-left px-3 py-1.5 rounded-sm text-xs font-mono transition ${
-                filter === "HIGH_CONVICTION"
-                  ? "bg-[#171717] text-[#FFFAF3] font-semibold"
-                  : "text-[#78716C] hover:text-[#171717] hover:bg-[#FFF2DB]/60"
-              }`}
-            >
-              High conviction
-            </button>
-          </div>
-
-          {/* Dither Graphic Banner Box */}
-          <div className="bg-[#171717] text-[#FFFAF3] p-3 rounded-sm text-[10px] font-mono leading-tight">
-            <div className="text-[#FFE5BF] font-bold">
-              /// ARKIV ATTESTATION PROOF
-            </div>
-            <div className="text-slate-400 text-[9px] mt-1">
-              Crypto calls indexed with cryptographic verification.
-              Retrospective tweet deletions do not alter score.
-            </div>
-          </div>
-
-          {/* Signal Integrity Stats */}
-          <div className="border border-[#E8DFD1] bg-[#FFF2DB]/40 rounded-sm p-3 text-xs space-y-1.5">
-            <div className="text-[10px] uppercase text-[#78716C] pb-1 border-b border-[#E8DFD1]">
-              SIGNAL INTEGRITY
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#78716C]">INDEXED</span>
-              <span className="font-bold text-[#171717]">245</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#78716C]">ARKIV-VERIFIED</span>
-              <span className="font-bold text-[#16A34A]">245</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#78716C]">REAL SIGNALS</span>
-              <span className="font-bold text-[#171717]">49</span>
-            </div>
-          </div>
         </div>
 
         {/* Column 2: Center Live Calls Feed (7 cols) */}
@@ -668,24 +587,6 @@ export default function TerminalPage() {
             </div>
           </div>
 
-          {/* Quick CTA */}
-          <div className="border border-[#E8DFD1] bg-[#FFF2DB]/60 rounded-sm p-3 text-center space-y-2">
-            <div className="text-xs font-bold text-[#171717]">
-              NEW COPY STRATEGY
-            </div>
-            <p className="text-[11px] text-[#78716C] font-sans">
-              Deploy automated non-custodial copy rules on top ranked traders.
-            </p>
-            <button
-              onClick={() => {
-                setSelectedSignal(null);
-                setIsModalOpen(true);
-              }}
-              className="w-full py-1.5 rounded-sm bg-[#171717] hover:bg-black text-[#FFFAF3] text-xs font-bold transition"
-            >
-              + CONFIGURE STRATEGY
-            </button>
-          </div>
         </div>
       </div>
 

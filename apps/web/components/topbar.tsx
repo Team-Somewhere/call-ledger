@@ -340,17 +340,10 @@ export function Topbar() {
         </nav>
       </div>
 
-      {/* Right: Arkiv TX + Network badge + Wallet */}
+      {/* Right: Arkiv TX + Wallet */}
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
         {/* Latest Arkiv TX widget */}
         <ArkivTxWidget />
-
-        {/* Testnet badge */}
-        <div className="flex items-center border border-[#E8DFD1] rounded-sm p-0.5 bg-[#FFF2DB]/60 text-[10px] font-mono">
-          <span className="px-2 py-0.5 rounded-sm uppercase bg-[#171717] text-[#FFFAF3] font-medium shadow-xs">
-            TESTNET
-          </span>
-        </div>
 
         {/* Wallet Section */}
         {isAuthenticated && address ? (

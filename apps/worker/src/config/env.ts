@@ -133,13 +133,13 @@ const workerEnvSchema = z.object({
     .int()
     .min(5)
     .max(1440)
-    .default(15),
+    .default(10),
   X_MONITOR_INTERVAL_MINUTES: z.coerce
     .number()
     .int()
     .min(5)
     .max(1440)
-    .default(15),
+    .default(10),
   X_MONITOR_MAX_TRADERS_PER_CYCLE: z.coerce.number().int().min(1).max(50).default(5),
   X_MONITOR_MAX_REQUESTS_PER_DAY: z.coerce.number().int().min(1).max(10000).default(10),
   X_MONITOR_ESTIMATED_CREDITS_PER_REQUEST: z.coerce.number().int().min(1).default(30),

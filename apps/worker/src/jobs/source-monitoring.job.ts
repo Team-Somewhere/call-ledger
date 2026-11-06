@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, or } from "drizzle-orm";
 import {
   creatorMonitoringLogs,
   creatorSources,
@@ -294,8 +294,8 @@ export class SourceMonitoringWorker {
       completedAt.getTime() + (intervalSeconds + jitterSeconds()) * 1000,
     );
 
-    // Track newly-inserted posts for Arkiv archiving (X sources only)
-    const newlyInsertedPosts: Array<{
+    // Archive every fetched X post (no Arkiv dedup) — includes updates.
+    const postsToArchive: Array<{
       dbId: string;
       sourcePostId: string;
       authorHandle: string | null;
@@ -338,34 +338,45 @@ export class SourceMonitoringWorker {
           })
           .returning({ id: creatorSourcePosts.id });
 
+        let dbId = inserted?.id;
         if (inserted) {
           itemsInserted += 1;
-          if (type === "X") {
-            newlyInsertedPosts.push({
-              dbId: inserted.id,
-              sourcePostId: post.sourcePostId,
-              authorHandle: post.authorHandle ?? source.handle,
-              content,
-              canonicalUrl: post.url ?? null,
-              publishedAt: post.publishedAt ?? null,
-            });
-          }
-          continue;
+        } else {
+          const [existing] = await tx
+            .select({ id: creatorSourcePosts.id })
+            .from(creatorSourcePosts)
+            .where(
+              and(
+                eq(creatorSourcePosts.creatorSourceId, source.id),
+                eq(creatorSourcePosts.externalPostId, post.sourcePostId),
+              ),
+            )
+            .limit(1);
+          dbId = existing?.id;
+          await tx
+            .update(creatorSourcePosts)
+            .set({
+              ...values,
+              updatedAt: completedAt,
+            })
+            .where(
+              and(
+                eq(creatorSourcePosts.creatorSourceId, source.id),
+                eq(creatorSourcePosts.externalPostId, post.sourcePostId),
+              ),
+            );
         }
 
-        await tx
-          .update(creatorSourcePosts)
-          .set({
-            ...values,
-            updatedAt: completedAt,
-          })
-          .where(
-            and(
-              eq(creatorSourcePosts.creatorSourceId, source.id),
-              eq(creatorSourcePosts.externalPostId, post.sourcePostId),
-              sql`${creatorSourcePosts.contentHash} <> ${post.contentHash} OR ${creatorSourcePosts.status} <> 'ACTIVE'`,
-            ),
-          );
+        if (type === "X" && dbId) {
+          postsToArchive.push({
+            dbId,
+            sourcePostId: post.sourcePostId,
+            authorHandle: post.authorHandle ?? source.handle,
+            content,
+            canonicalUrl: post.url ?? null,
+            publishedAt: post.publishedAt ?? null,
+          });
+        }
       }
 
       await tx
@@ -407,14 +418,14 @@ export class SourceMonitoringWorker {
     });
 
     // --- Arkiv archiving (outside the DB transaction) ---
-    // Only X sources. Only newly-inserted posts. Only if Arkiv is configured.
-    if (type === "X" && newlyInsertedPosts.length > 0 && isArkivWriteReady()) {
+    // Every fetched X post is archived without deduplication.
+    if (type === "X" && postsToArchive.length > 0 && isArkivWriteReady()) {
       logger.info(
-        `[ARCHIVE] ${newlyInsertedPosts.length} new post(s) to archive for @${source.handle}`,
+        `[ARCHIVE] ${postsToArchive.length} post(s) to archive for @${source.handle}`,
       );
       let archived = 0;
-      let alreadyArchived = 0;
-      for (const post of newlyInsertedPosts) {
+      let skipped = 0;
+      for (const post of postsToArchive) {
         try {
           const result = await archivePostIfNew({
             creatorSourcePostId: post.dbId,
@@ -427,7 +438,7 @@ export class SourceMonitoringWorker {
             publishedAt: post.publishedAt,
           });
           if (result.skipped) {
-            alreadyArchived++;
+            skipped++;
           } else {
             archived++;
             logger.info(
@@ -442,7 +453,7 @@ export class SourceMonitoringWorker {
         }
       }
       logger.info(
-        `[ARCHIVE] @${source.handle}: archived=${archived} skipped=${alreadyArchived}`,
+        `[ARCHIVE] @${source.handle}: archived=${archived} skipped=${skipped}`,
       );
     }
   }
@@ -594,8 +605,8 @@ function pollIntervalSeconds(type: CreatorSourceType): number {
     case "WEBSITE":
       return env.MONITORING_POLL_INTERVAL_WEBSITE_SECONDS;
     case "X":
-      // Use X_MONITOR_DEFAULT_INTERVAL_MINUTES if set, otherwise fall back to RSS interval
-      return (env.X_MONITOR_DEFAULT_INTERVAL_MINUTES ?? 30) * 60;
+      // Use X_MONITOR_DEFAULT_INTERVAL_MINUTES if set, otherwise fall back to 10 min
+      return (env.X_MONITOR_DEFAULT_INTERVAL_MINUTES ?? 10) * 60;
   }
 }
 

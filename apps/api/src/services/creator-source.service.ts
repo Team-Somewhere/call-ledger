@@ -17,6 +17,10 @@ import {
   type ValidatedCreatorSource,
 } from "@call-ledger/shared";
 import { sanitizePublicUrl } from "../utils/public-url";
+import {
+  archivePostAlways,
+  isApiArkivWriteReady,
+} from "./arkiv-write.service";
 
 /**
  * Creator / source management.
@@ -144,27 +148,38 @@ export async function ingestPostsForSource(
 
     const now = new Date();
     let inserted = 0;
+    const archiveQueue: Array<{
+      dbId: string;
+      sourcePostId: string;
+      authorHandle: string | null;
+      content: string | null;
+      canonicalUrl: string | null;
+      publishedAt: Date | null;
+    }> = [];
 
     for (const post of fetchResult.posts) {
+      const content = post.text?.trim() || null;
+      const values = {
+        creatorSourceId: source.id,
+        externalPostId: post.sourcePostId,
+        sourceType: type,
+        authorExternalId: post.sourceAuthorId,
+        authorHandle: post.authorHandle ?? source.handle,
+        title: post.title?.trim() || null,
+        content,
+        canonicalUrl: post.url ?? source.canonicalUrl,
+        publishedAt: post.publishedAt ?? now,
+        fetchedAt: now,
+        contentHash: post.contentHash,
+        mediaUrls: post.mediaUrls ?? [],
+        isReply: post.isReply ?? false,
+        isRepost: post.isRepost ?? false,
+        status: post.status ?? "ACTIVE",
+      } as const;
+
       const [row] = await db
         .insert(creatorSourcePosts)
-        .values({
-          creatorSourceId: source.id,
-          externalPostId: post.sourcePostId,
-          sourceType: type,
-          authorExternalId: post.sourceAuthorId,
-          authorHandle: post.authorHandle ?? source.handle,
-          title: post.title?.trim() || null,
-          content: post.text?.trim() || null,
-          canonicalUrl: post.url ?? source.canonicalUrl,
-          publishedAt: post.publishedAt ?? now,
-          fetchedAt: now,
-          contentHash: post.contentHash,
-          mediaUrls: post.mediaUrls ?? [],
-          isReply: post.isReply ?? false,
-          isRepost: post.isRepost ?? false,
-          status: post.status ?? "ACTIVE",
-        })
+        .values(values)
         .onConflictDoNothing({
           target: [
             creatorSourcePosts.creatorSourceId,
@@ -173,7 +188,43 @@ export async function ingestPostsForSource(
         })
         .returning({ id: creatorSourcePosts.id });
 
-      if (row) inserted++;
+      let dbId = row?.id;
+      if (row) {
+        inserted++;
+      } else {
+        // Still archive on every fetch — look up existing row id.
+        const [existing] = await db
+          .select({ id: creatorSourcePosts.id })
+          .from(creatorSourcePosts)
+          .where(
+            and(
+              eq(creatorSourcePosts.creatorSourceId, source.id),
+              eq(creatorSourcePosts.externalPostId, post.sourcePostId),
+            ),
+          )
+          .limit(1);
+        dbId = existing?.id;
+        if (existing) {
+          await db
+            .update(creatorSourcePosts)
+            .set({
+              ...values,
+              updatedAt: now,
+            })
+            .where(eq(creatorSourcePosts.id, existing.id));
+        }
+      }
+
+      if (type === "X" && dbId) {
+        archiveQueue.push({
+          dbId,
+          sourcePostId: post.sourcePostId,
+          authorHandle: post.authorHandle ?? source.handle,
+          content,
+          canonicalUrl: post.url ?? source.canonicalUrl,
+          publishedAt: post.publishedAt ?? null,
+        });
+      }
     }
 
     await db
@@ -183,6 +234,30 @@ export async function ingestPostsForSource(
         updatedAt: now,
       })
       .where(eq(creatorSources.id, source.id));
+
+    // Archive every fetched X post immediately (no Arkiv dedup).
+    if (type === "X" && archiveQueue.length > 0 && isApiArkivWriteReady()) {
+      for (const post of archiveQueue) {
+        try {
+          await archivePostAlways({
+            creatorSourcePostId: post.dbId,
+            creatorId: source.creatorId,
+            sourcePostId: post.sourcePostId,
+            authorHandle: post.authorHandle ?? source.handle ?? "unknown",
+            authorDisplayName:
+              source.displayName ?? post.authorHandle ?? source.handle ?? "unknown",
+            content: post.content,
+            canonicalUrl: post.canonicalUrl,
+            publishedAt: post.publishedAt,
+          });
+        } catch (err) {
+          console.error(
+            `Failed to archive post ${post.sourcePostId} for source ${sourceId}:`,
+            err,
+          );
+        }
+      }
+    }
 
     return inserted;
   } catch (err) {

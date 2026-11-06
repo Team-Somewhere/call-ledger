@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Archive,
   ArrowLeft,
-  CheckCircle2,
   ExternalLink,
   Loader2,
   RefreshCw,
@@ -26,12 +25,6 @@ import {
 } from "../../../lib/api";
 import { useWalletSession } from "../../../lib/use-wallet-session";
 import { EmptyState } from "../../../components/empty-state";
-import {
-  MonitoringStatusBadge,
-  SourceBadge,
-  VerificationBadge,
-  sourceDisplayHandle,
-} from "../../../components/source-badge";
 import { ToastProvider, useToast } from "../../../components/toast";
 
 interface CreatorPageProps {
@@ -111,6 +104,19 @@ function CreatorProfileContent({ id }: { id: string }) {
     void loadPosts();
   }, [loadPosts]);
 
+  const reloadArchived = useCallback(async (handle: string) => {
+    setArchivedLoading(true);
+    try {
+      const resp = await api.archiveTraderPosts(handle, "?limit=10");
+      setArchivedPosts(resp.data);
+      setArchivedLoaded(true);
+    } catch {
+      // Archive may not be configured — fail gracefully
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, []);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -118,6 +124,10 @@ function CreatorProfileContent({ id }: { id: string }) {
       notify("success", "Fetched latest posts from X.");
       await loadPosts();
       await load();
+      const xSource = creator?.sources.find((s) => s.sourceType === "X");
+      if (xSource?.handle) {
+        await reloadArchived(xSource.handle);
+      }
     } catch {
       notify("error", "Failed to refresh posts.");
     } finally {
@@ -268,85 +278,6 @@ function CreatorProfileContent({ id }: { id: string }) {
         </div>
       )}
 
-      {/* Sources */}
-      <div className="border border-[#E8DFD1] rounded-sm">
-        <div className="px-4 py-3 border-b border-[#E8DFD1] text-xs font-bold uppercase tracking-wider text-[#171717]">
-          // Connected source profiles
-        </div>
-        <div className="divide-y divide-[#E8DFD1]">
-          {creator.sources.map((source) => (
-            <div key={source.id} className="px-4 py-3 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div className="flex items-center gap-2 min-w-0">
-                  <SourceBadge sourceType={source.sourceType} />
-                  <a
-                    href={source.canonicalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-[#171717] hover:underline truncate flex items-center gap-1"
-                  >
-                    {sourceDisplayHandle(source)}
-                    <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                  </a>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <VerificationBadge status={source.verificationStatus} />
-                  <MonitoringStatusBadge status={source.status} />
-                </div>
-              </div>
-              <div className="text-[10px] text-[#78716C] flex flex-wrap gap-x-3 gap-y-1">
-                <span>IDENTITY: {source.externalId ?? "unresolved"}</span>
-                <span>
-                  LINK: {source.linkRelationshipType ?? "unknown"}
-                  {source.linkVerificationMethod
-                    ? ` / ${source.linkVerificationMethod}`
-                    : ""}
-                </span>
-                <span>
-                  LAST FETCH:{" "}
-                  {source.lastFetchedAt
-                    ? new Date(source.lastFetchedAt).toLocaleString()
-                    : "never"}
-                </span>
-                {source.lastError && (
-                  <span className="text-[#F62440]">
-                    ERROR: {source.lastError}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-          {creator.sources.length === 0 && (
-            <div className="px-4 py-6 text-xs text-[#78716C]">
-              No source profiles linked.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Monitoring status summary */}
-      <div className="border border-[#E8DFD1] rounded-sm bg-[#FFF2DB]/30 p-4">
-        <div className="text-xs font-bold uppercase tracking-wider text-[#171717] mb-2">
-          // Monitoring status
-        </div>
-        <div className="space-y-1.5 text-[11px] text-[#78716C] font-sans">
-          {creator.sources.length === 0 && <p>No monitoring configured.</p>}
-          {creator.sources.map((source) => (
-            <p key={source.id} className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3 h-3 shrink-0" />
-              <span className="font-mono">{source.sourceType}</span> —{" "}
-              {source.status === "ACTIVE"
-                ? source.lastFetchedAt
-                  ? `active; last fetched ${new Date(source.lastFetchedAt).toLocaleString()}.`
-                  : "active; waiting for its first scheduled fetch."
-                : source.status === "WAITING_FOR_AUTHORIZED_ACCESS"
-                  ? "awaiting authorized provider access. No posts are being fetched."
-                  : source.status.toLowerCase() + "."}
-            </p>
-          ))}
-        </div>
-      </div>
-
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-[10px] uppercase text-[#78716C] tracking-widest">
@@ -377,7 +308,7 @@ function CreatorProfileContent({ id }: { id: string }) {
             description={
               waiting
                 ? "Click 'Fetch Latest Posts' to index recent posts from X."
-                : "This creator's connected sources have not produced any posts yet."
+                : "No posts collected yet. Click 'Fetch Latest Posts' to pull the latest from X."
             }
           />
         ) : (
@@ -388,7 +319,6 @@ function CreatorProfileContent({ id }: { id: string }) {
                 <article key={post.id} className="space-y-2 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <SourceBadge sourceType={post.sourceType} />
                       {post.isReply && (
                         <span className="text-[9px] text-[#78716C]">REPLY</span>
                       )}
@@ -485,8 +415,8 @@ function CreatorProfileContent({ id }: { id: string }) {
         {!archivedLoading && archivedLoaded && archivedPosts.length === 0 && (
           <div className="border border-[#E8DFD1] rounded-sm bg-[#FFFAF3] p-5 text-center text-xs text-[#78716C]">
             <Archive className="w-5 h-5 mx-auto mb-2" />
-            No posts archived yet for this trader. Posts are archived
-            automatically when the monitoring worker runs.
+            No posts archived yet for this trader. Posts are archived when
+            you fetch latest posts or on the 10-minute monitoring cycle.
           </div>
         )}
 
@@ -507,9 +437,11 @@ function CreatorProfileContent({ id }: { id: string }) {
                     )}
                   </div>
                   <span className="text-[10px] text-[#78716C]">
-                    {post.capturedAt
-                      ? new Date(post.capturedAt).toLocaleDateString()
-                      : ""}
+                    {post.originalCreatedAt
+                      ? new Date(post.originalCreatedAt).toLocaleString()
+                      : post.capturedAt
+                        ? new Date(post.capturedAt).toLocaleString()
+                        : ""}
                   </span>
                 </div>
                 {post.postText && (
