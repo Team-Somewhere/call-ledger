@@ -32,7 +32,7 @@ export async function handle(raw: unknown): Promise<MessageResponse> {
       case "RESOLVE_TOKEN":
         return { ok: true, data: await resolveSymbol(msg.symbol) };
       case "GET_CHART":
-        return { ok: true, data: await fetchChart(msg.chain, msg.address, msg.range) };
+        return { ok: true, data: await fetchChart(msg.chain, msg.address, msg.range, msg.priceUsd, msg.change24hPct) };
       case "GET_FX":
         return { ok: true, data: await getUsdToInr() };
       case "GET_PREFERENCES":
