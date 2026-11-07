@@ -59,6 +59,9 @@ describe("Order Service & Controller Unit Tests", () => {
         transactionHash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
       };
     },
+    listOrders: async () => ({ orders: [], nextPageToken: null }),
+    cancelOrder: async () => ({ ok: true }),
+    submitSetupTransaction: async () => ({ status: "confirmed" }),
   };
 
   before(() => {

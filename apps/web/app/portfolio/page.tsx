@@ -93,15 +93,15 @@ export default function PortfolioPage() {
       ["CANCELLED", "FAILED"].includes(o.status),
     );
 
-    const totalDeployedUsd = orders.reduce((acc, o) => {
-      const amount = parseFloat(o.inputAmount) || 0;
-      return acc + amount;
-    }, 0);
+    const totalDeployedUsd = orders
+      .filter((o) => o.status === "FILLED" || o.status === "PARTIALLY_FILLED")
+      .reduce((acc, o) => acc + (parseFloat(o.inputAmount) || 0), 0);
 
+    const closed = orders.filter((o) => o.status === "FILLED");
     const winRate =
-      totalOrders > 0
-        ? Math.round((filledOrders.length / totalOrders) * 100)
-        : 100;
+      closed.length > 0
+        ? Math.round((closed.length / Math.max(orders.filter((o) => ["FILLED", "FAILED", "CANCELLED"].includes(o.status)).length, 1)) * 100)
+        : null;
 
     return {
       totalOrders,
@@ -190,9 +190,7 @@ export default function PortfolioPage() {
             <span>EXECUTION SUCCESS</span>
           </div>
           <div className="text-2xl font-bold text-[#171717]">
-            {definitiveMetrics.totalOrders > 0
-              ? `${definitiveMetrics.winRate}%`
-              : "100%"}
+            {definitiveMetrics.winRate == null ? "—" : `${definitiveMetrics.winRate}%`}
           </div>
           <div className="text-[10px] text-[#78716C]">
             {definitiveMetrics.filledOrders} FILLED • {definitiveMetrics.pendingOrders} PENDING
@@ -210,7 +208,7 @@ export default function PortfolioPage() {
             <span className="text-sm font-normal text-[#78716C]">CHAINS</span>
           </div>
           <div className="text-[10px] text-[#78716C] truncate">
-            {walletBalances?.chainBreakdown.map((c) => c.chain).join(", ") || "Base, Ethereum"}
+            {walletBalances?.chainBreakdown.map((c) => c.chain).join(", ") || "No funded network yet"}
           </div>
         </div>
       </div>

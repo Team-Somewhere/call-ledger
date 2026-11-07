@@ -1,18 +1,37 @@
 import { desc, eq } from "drizzle-orm";
 import { db, orders, type OrderSelect } from "@call-ledger/database";
 import {
-  createDefinitiveClient,
   type FlashOrderStatusResponse,
   type FlashQuoteResponse,
   type FlashSubmitOrderResponse,
-  type IDefinitiveClient,
 } from "@call-ledger/definitive";
 import {
   type FlashQuoteRequestInput,
   type FlashSubmitOrderRequestOutput,
-  type OrderType,
 } from "@call-ledger/shared";
 import { env } from "../config/env";
+import {
+  getDefinitiveClient,
+  isDefinitiveConfigured,
+  setDefinitiveClientForTesting,
+} from "./definitive-client";
+import {
+  applyFlashStatus,
+  assertQuoteUsable,
+  dbOrderType,
+  expectedCancelMessage,
+  findStoredQuote,
+  markQuoteConsumed,
+  persistFlashQuote,
+  portfolioForUser,
+  submissionFromStoredQuote,
+} from "./flash-ledger.service";
+
+export {
+  getDefinitiveClient,
+  isDefinitiveConfigured,
+  setDefinitiveClientForTesting,
+};
 
 export class OrderServiceError extends Error {
   constructor(
@@ -27,36 +46,13 @@ export class OrderServiceError extends Error {
 }
 
 /**
- * Singleton Definitive Flash client configured with server-side environment variables.
- */
-let definitiveClientInstance: IDefinitiveClient | null = null;
-
-export function getDefinitiveClient(): IDefinitiveClient {
-  if (!definitiveClientInstance) {
-    definitiveClientInstance = createDefinitiveClient({
-      apiKey: env.DEFINITIVE_API_KEY,
-      baseUrl: env.DEFINITIVE_BASE_URL,
-    });
-  }
-  return definitiveClientInstance;
-}
-
-/** Set a mock/custom client for unit tests. */
-export function setDefinitiveClientForTesting(client: IDefinitiveClient | null): void {
-  definitiveClientInstance = client;
-}
-
-export function isDefinitiveConfigured(): boolean {
-  return getDefinitiveClient().isConfigured();
-}
-
-/**
  * Request a live price quote and EIP-712 signable payload from Definitive Flash.
  * Security: Validates that the requested funderAddress matches the authenticated user's wallet.
  */
 export async function requestFlashQuote(
   userAddress: string,
   input: FlashQuoteRequestInput,
+  userId?: string,
 ): Promise<FlashQuoteResponse> {
   const normUserAddress = userAddress.toLowerCase();
   const normFunder = input.funderAddress.toLowerCase();
@@ -85,14 +81,41 @@ export async function requestFlashQuote(
       limitCrossPrice: input.limitCrossPrice,
       funderAddress: normFunder,
       maxSlippage: input.maxSlippage,
+      maxPriceImpact: input.maxPriceImpact,
       expireTime: input.expireTime,
       flashIntegratorFeeBps: feeBps,
+      startTime: input.startTime,
+      durationSeconds: input.durationSeconds,
+      twapBucketCount: input.twapBucketCount,
+      triggers: input.triggers,
+      attachedBracket: input.attachedBracket,
+      forceMinimalAllowance: true,
+      evmUsePermit2: false,
     });
+
+    if (userId) {
+      try {
+        await persistFlashQuote({
+          userId,
+          walletAddress: normFunder,
+          request: { ...input, flashIntegratorFeeBps: feeBps },
+          quote,
+        });
+      } catch (persistError) {
+        console.error(
+          "[flash] quote persistence failed",
+          persistError instanceof Error ? persistError.message : "unknown",
+        );
+      }
+    }
 
     return quote;
   } catch (err: unknown) {
     if (err instanceof Error && "statusCode" in err) {
       const anyErr = err as { code?: string; statusCode?: number; details?: unknown };
+      console.error(
+        `[flash] quote failed ${anyErr.statusCode ?? 502}: ${err.message}`,
+      );
       throw new OrderServiceError(
         anyErr.code ?? "QUOTE_FAILED",
         err.message,
@@ -128,33 +151,64 @@ export async function submitFlashOrder(
     );
   }
 
-  const client = getDefinitiveClient();
-  const feeBps = input.flashIntegratorFeeBps ?? env.DEFINITIVE_INTEGRATOR_FEE_BPS;
+  const stored = await findStoredQuote(normFunder, input.quoteId).catch(() => null);
+  if (!stored) {
+    throw new OrderServiceError(
+      "QUOTE_NOT_FOUND",
+      "This quote is not on file for your wallet. Request a fresh quote and review it before signing.",
+      409,
+    );
+  }
+  try {
+    assertQuoteUsable(stored);
+  } catch (expiry) {
+    const code = expiry instanceof Error ? expiry.message : "QUOTE_EXPIRED";
+    throw new OrderServiceError(
+      code,
+      code === "QUOTE_EXPIRED"
+        ? "This quote has expired. Request a new quote and review it before submitting."
+        : "This quote was already used. Request a new quote.",
+      409,
+    );
+  }
 
+  const storedRequest = stored.quoteRequest as FlashQuoteRequestInput;
+  const storedResponse = stored.quoteResponse as FlashQuoteResponse;
+  const [existing] = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.flashQuoteId, input.quoteId))
+    .limit(1);
+  if (existing) {
+    return {
+      order: existing,
+      flashResponse: {
+        orderId: existing.providerOrderId || existing.id,
+        status: existing.status as FlashSubmitOrderResponse["status"],
+      },
+    };
+  }
+
+  const client = getDefinitiveClient();
   let flashRes: FlashSubmitOrderResponse;
   try {
-    flashRes = await client.submitOrder({
-      targetChain: input.targetChain,
-      contraChain: input.contraChain,
-      targetAsset: input.targetAsset,
-      contraAsset: input.contraAsset,
-      side: input.side,
-      qty: input.qty,
-      orderType: input.orderType,
-      funderAddress: normFunder,
-      quoteId: input.quoteId,
-      userSignature: input.userSignature,
-      evmOrderTypedData: input.evmOrderTypedData,
-      limitNotionalPrice: input.limitNotionalPrice,
-      expireTime: input.expireTime,
-      flashIntegratorFeeBps: feeBps,
-    });
+    flashRes = await client.submitOrder(
+      submissionFromStoredQuote(storedResponse, storedRequest, {
+        userSignature: input.userSignature,
+        evmPermitTypedData: input.evmPermitTypedData,
+        evmPermitSignature: input.evmPermitSignature,
+        attachedBracket: input.attachedBracket as Record<string, unknown> | undefined,
+      }),
+    );
   } catch (err: unknown) {
     if (err instanceof Error && "statusCode" in err) {
       const anyErr = err as { code?: string; statusCode?: number; details?: unknown };
+      const uncertain = anyErr.code === "TIMEOUT" || anyErr.statusCode === 504;
       throw new OrderServiceError(
-        anyErr.code ?? "SUBMISSION_FAILED",
-        err.message,
+        uncertain ? "SUBMISSION_UNCERTAIN" : (anyErr.code ?? "SUBMISSION_FAILED"),
+        uncertain
+          ? "Flash did not confirm whether the order was accepted. It was not submitted again. Refresh your orders before trying a new quote."
+          : err.message,
         anyErr.statusCode ?? 502,
         anyErr.details,
       );
@@ -167,26 +221,37 @@ export async function submitFlashOrder(
   }
 
   // Persist order record in PostgreSQL
-  const inputTokenAddress = input.side === "buy" ? input.contraAsset : input.targetAsset;
-  const outputTokenAddress = input.side === "buy" ? input.targetAsset : input.contraAsset;
+  const inputTokenAddress = storedRequest.side === "buy" ? storedRequest.contraAsset : storedRequest.targetAsset;
+  const outputTokenAddress = storedRequest.side === "buy" ? storedRequest.targetAsset : storedRequest.contraAsset;
 
   const [savedOrder] = await db
     .insert(orders)
     .values({
       userId,
-      signalId: input.signalId ?? null,
+      signalId: stored.signalId ?? input.signalId ?? null,
       strategyId: input.strategyId ?? null,
       provider: "DEFINITIVE",
       providerOrderId: flashRes.orderId,
-      chainId: input.targetChain,
+      chainId: storedRequest.targetChain,
       walletAddress: normUserAddress,
       inputToken: inputTokenAddress,
       outputToken: outputTokenAddress,
-      inputAmount: input.qty,
-      orderType: (input.orderType.toUpperCase() as OrderType) || "LIMIT",
+      inputAmount: storedRequest.qty,
+      orderType: dbOrderType(storedRequest.orderType),
       status: flashRes.status || "SUBMITTED",
+      flashQuoteId: stored.flashQuoteId,
+      orderParameters: {
+        side: storedRequest.side,
+        orderType: storedRequest.orderType,
+        limitNotionalPrice: storedRequest.limitNotionalPrice,
+        triggers: storedRequest.triggers,
+        attachedBracket: storedRequest.attachedBracket,
+        signalId: stored.signalId,
+      },
+      rawStatus: flashRes.raw?.status ? String(flashRes.raw.status) : null,
     })
     .returning();
+  await markQuoteConsumed(stored.id);
 
   if (!savedOrder) {
     throw new OrderServiceError("DATABASE_ERROR", "Failed to persist order record.", 500);
@@ -232,29 +297,8 @@ export async function getOrderWithStatusSync(
     try {
       const client = getDefinitiveClient();
       flashStatus = await client.getOrderStatus(found.providerOrderId);
-
-      const updates: Partial<typeof orders.$inferInsert> = {};
-      if (flashStatus.status && flashStatus.status !== found.status) {
-        updates.status = flashStatus.status;
-      }
-      if (flashStatus.transactionHash && flashStatus.transactionHash !== found.transactionHash) {
-        updates.transactionHash = flashStatus.transactionHash;
-      }
-      if (flashStatus.executedQty && flashStatus.executedQty !== found.outputAmount) {
-        updates.outputAmount = flashStatus.executedQty;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        updates.updatedAt = new Date();
-        const [updated] = await db
-          .update(orders)
-          .set(updates)
-          .where(eq(orders.id, orderId))
-          .returning();
-        if (updated) {
-          return { order: updated, flashStatus };
-        }
-      }
+      const updated = await applyFlashStatus(found, flashStatus);
+      return { order: updated, flashStatus };
     } catch {
       // Non-fatal if Flash status check fails temporarily; return persisted database record
     }
@@ -272,4 +316,55 @@ export async function listUserOrders(userId: string): Promise<OrderSelect[]> {
     .from(orders)
     .where(eq(orders.userId, userId))
     .orderBy(desc(orders.createdAt));
+}
+
+export async function portfolioSummary(userId: string) {
+  return portfolioForUser(userId);
+}
+
+export async function cancelUserOrder(
+  userId: string,
+  orderId: string,
+  walletAddress: string,
+  cancelMessage: string,
+  userSignature: string,
+) {
+  const [found] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!found) {
+    throw new OrderServiceError("ORDER_NOT_FOUND", "Order was not found.", 404);
+  }
+  if (found.userId !== userId || found.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+    throw new OrderServiceError("FORBIDDEN", "This order belongs to a different wallet.", 403);
+  }
+  if (!found.providerOrderId) {
+    throw new OrderServiceError("NOT_CANCELLABLE", "This order has no Flash identifier yet.", 409);
+  }
+  const expected = expectedCancelMessage(found.providerOrderId);
+  if (cancelMessage !== expected) {
+    throw new OrderServiceError(
+      "INVALID_CANCEL_MESSAGE",
+      "The cancellation message does not match the Flash order.",
+      400,
+    );
+  }
+  const client = getDefinitiveClient();
+  try {
+    await client.cancelOrder(found.providerOrderId, { cancelMessage, userSignature });
+  } catch (err: unknown) {
+    if (err instanceof Error && "statusCode" in err) {
+      const anyErr = err as { code?: string; statusCode?: number };
+      throw new OrderServiceError(
+        anyErr.code ?? "CANCEL_FAILED",
+        err.message,
+        anyErr.statusCode ?? 502,
+      );
+    }
+    throw new OrderServiceError("CANCEL_FAILED", "Flash did not accept the cancellation.", 502);
+  }
+  const flashStatus = await client.getOrderStatus(found.providerOrderId);
+  const updated = await applyFlashStatus(
+    { ...found, status: "PENDING_CANCELLATION" },
+    flashStatus,
+  );
+  return { order: updated, flashStatus };
 }

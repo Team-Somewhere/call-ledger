@@ -35,22 +35,42 @@ export interface VerifiedAsset {
 
 export const VERIFIED_CHAINS: Record<
   string,
-  { name: string; chainId: number; explorerBaseUrl: string }
+  {
+    name: string;
+    chainId: number;
+    explorerBaseUrl: string;
+    nativeSymbol: string;
+    nativeDecimals: number;
+    rpcUrl: string;
+    flashChain: string;
+  }
 > = {
   base: {
     name: "Base",
     chainId: 8453,
     explorerBaseUrl: "https://basescan.org",
+    nativeSymbol: "ETH",
+    nativeDecimals: 18,
+    rpcUrl: "https://mainnet.base.org",
+    flashChain: "base",
   },
   ethereum: {
     name: "Ethereum",
     chainId: 1,
     explorerBaseUrl: "https://etherscan.io",
+    nativeSymbol: "ETH",
+    nativeDecimals: 18,
+    rpcUrl: "https://ethereum-rpc.publicnode.com",
+    flashChain: "ethereum",
   },
   arbitrum: {
     name: "Arbitrum",
     chainId: 42161,
     explorerBaseUrl: "https://arbiscan.io",
+    nativeSymbol: "ETH",
+    nativeDecimals: 18,
+    rpcUrl: "https://arb1.arbitrum.io/rpc",
+    flashChain: "arbitrum",
   },
 };
 
@@ -77,6 +97,38 @@ export const VERIFIED_ASSETS: Record<string, Record<string, VerifiedAsset>> = {
       name: "USD Coin",
       address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       decimals: 6,
+      chain: "base",
+      chainId: 8453,
+    },
+    BTC: {
+      symbol: "cbBTC",
+      name: "Coinbase Wrapped BTC",
+      address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      decimals: 8,
+      chain: "base",
+      chainId: 8453,
+    },
+    BITCOIN: {
+      symbol: "cbBTC",
+      name: "Coinbase Wrapped BTC",
+      address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      decimals: 8,
+      chain: "base",
+      chainId: 8453,
+    },
+    CBBTC: {
+      symbol: "cbBTC",
+      name: "Coinbase Wrapped BTC",
+      address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      decimals: 8,
+      chain: "base",
+      chainId: 8453,
+    },
+    WBTC: {
+      symbol: "WBTC",
+      name: "Wrapped BTC",
+      address: "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c",
+      decimals: 8,
       chain: "base",
       chainId: 8453,
     },

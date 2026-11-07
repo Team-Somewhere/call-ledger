@@ -8,6 +8,8 @@ export * from "./signals";
 export * from "./signal-verifications";
 export * from "./orders";
 export * from "./positions";
+export * from "./flash-quotes";
+export * from "./order-fills";
 export * from "./arkiv-records";
 // Phase 2 tables
 export * from "./x-account-connections";

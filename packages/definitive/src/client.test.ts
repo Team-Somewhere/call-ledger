@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { DefinitiveClient, mapFlashStatusToOrderStatus } from "./client";
+import { DefinitiveClient, flashCancelMessage, mapFlashStatusToOrderStatus } from "./client";
 import { DefinitiveApiError } from "./errors";
 
 describe("Definitive Flash Client", () => {
@@ -179,11 +179,21 @@ describe("Definitive Flash Client", () => {
   });
 
   it("maps Flash status strings to CallLedger OrderStatus accurately", () => {
+    assert.equal(mapFlashStatusToOrderStatus("ORDER_STATUS_FILLED"), "FILLED");
+    assert.equal(mapFlashStatusToOrderStatus("ORDER_STATUS_ACCEPTED"), "PENDING");
+    assert.equal(mapFlashStatusToOrderStatus("ORDER_STATUS_REJECTED"), "FAILED");
     assert.equal(mapFlashStatusToOrderStatus("filled"), "FILLED");
     assert.equal(mapFlashStatusToOrderStatus("partially_filled"), "PARTIALLY_FILLED");
     assert.equal(mapFlashStatusToOrderStatus("open"), "PENDING");
     assert.equal(mapFlashStatusToOrderStatus("submitted"), "SUBMITTED");
     assert.equal(mapFlashStatusToOrderStatus("cancelled"), "CANCELLED");
     assert.equal(mapFlashStatusToOrderStatus("failed"), "FAILED");
+  });
+
+  it("uses the documented EVM cancel message", () => {
+    assert.equal(
+      flashCancelMessage("ord_1"),
+      "Definitive Flash v1 — Cancel Order\nOrder: ord_1",
+    );
   });
 });

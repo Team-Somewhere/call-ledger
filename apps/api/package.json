@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./source-adapters": "./src/integrations/sources/index.ts"
+    "./source-adapters": "./src/integrations/sources/index.ts",
+    "./flash-ledger": "./src/services/flash-ledger.service.ts"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",

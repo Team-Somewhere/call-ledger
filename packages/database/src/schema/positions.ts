@@ -34,6 +34,16 @@ export const positions = pgTable(
     realizedPnl: numeric("realized_pnl", { precision: 18, scale: 4 }).default(
       "0.0000",
     ),
+    walletAddress: varchar("wallet_address", { length: 255 }),
+    quoteAsset: varchar("quote_asset", { length: 255 }),
+    investedAmount: numeric("invested_amount", { precision: 28, scale: 12 }).default(
+      "0",
+    ),
+    remainingQuantity: numeric("remaining_quantity", { precision: 28, scale: 12 }),
+    totalFilledQuantity: numeric("total_filled_quantity", {
+      precision: 28,
+      scale: 12,
+    }),
     status: varchar("status", { length: 50 }).default("OPEN").notNull(), // OPEN / CLOSED
     openedAt: timestamp("opened_at", { withTimezone: true })
       .defaultNow()

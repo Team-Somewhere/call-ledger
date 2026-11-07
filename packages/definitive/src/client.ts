@@ -13,10 +13,42 @@ import type {
 export const DEFAULT_DEFINITIVE_BASE_URL = "https://flash.definitive.fi/v1";
 export const DEFAULT_TIMEOUT_MS = 10_000;
 
+const CANCELLABLE = new Set([
+  "ORDER_STATUS_PENDING",
+  "ORDER_STATUS_ACCEPTED",
+  "ORDER_STATUS_PARTIALLY_FILLED",
+  "pending",
+  "accepted",
+  "partially_filled",
+  "open",
+]);
+
+export function flashCancelMessage(orderId: string): string {
+  return `Definitive Flash v1 — Cancel Order\nOrder: ${orderId}`;
+}
+
 export function mapFlashStatusToOrderStatus(rawStatus?: string): OrderStatus {
   if (!rawStatus) return "PENDING";
-  const s = rawStatus.toLowerCase().trim();
+  const s = rawStatus.trim();
+  const lower = s.toLowerCase();
   switch (s) {
+    case "ORDER_STATUS_FILLED":
+      return "FILLED";
+    case "ORDER_STATUS_PARTIALLY_FILLED":
+      return "PARTIALLY_FILLED";
+    case "ORDER_STATUS_PENDING":
+    case "ORDER_STATUS_ACCEPTED":
+    case "ORDER_STATUS_UNSPECIFIED":
+      return "PENDING";
+    case "ORDER_STATUS_CANCELLED":
+      return "CANCELLED";
+    case "ORDER_STATUS_REJECTED":
+    case "ORDER_STATUS_TERMINATED":
+      return "FAILED";
+    default:
+      break;
+  }
+  switch (lower) {
     case "filled":
     case "executed":
     case "completed":
@@ -29,18 +61,46 @@ export function mapFlashStatusToOrderStatus(rawStatus?: string): OrderStatus {
     case "open":
     case "new":
     case "pending":
+    case "accepted":
     case "routing":
       return "PENDING";
     case "cancelled":
     case "canceled":
       return "CANCELLED";
+    case "pending_cancel":
+    case "pending_cancellation":
+      return "PENDING_CANCELLATION";
+    case "expired":
+      return "EXPIRED";
     case "failed":
     case "rejected":
-    case "expired":
       return "FAILED";
     default:
       return "PENDING";
   }
+}
+
+export function isFlashStatusCancellable(rawStatus?: string): boolean {
+  if (!rawStatus) return false;
+  return CANCELLABLE.has(rawStatus) || CANCELLABLE.has(rawStatus.toLowerCase());
+}
+
+function flashErrorMessage(data: Record<string, any>, status: number): string {
+  const base =
+    typeof data?.message === "string"
+      ? data.message
+      : typeof data?.error === "string"
+        ? data.error
+        : typeof data?.error?.message === "string"
+          ? data.error.message
+          : `Flash quote failed with HTTP ${status}`;
+  const details = data?.error?.details ?? data?.details;
+  if (!details || typeof details !== "object") return base;
+  const parts = Object.entries(details as Record<string, unknown>).map(([key, value]) => {
+    const text = Array.isArray(value) ? value.map(String).join(", ") : String(value);
+    return `${key}: ${text}`;
+  });
+  return parts.length > 0 ? `${base}: ${parts.join("; ")}` : base;
 }
 
 export class DefinitiveClient implements IDefinitiveClient {
@@ -132,6 +192,16 @@ export class DefinitiveClient implements IDefinitiveClient {
     if (request.recipientAddress) {
       bodyPayload.recipientAddress = request.recipientAddress;
     }
+    if (request.maxPriceImpact) bodyPayload.maxPriceImpact = request.maxPriceImpact;
+    if (request.startTime) bodyPayload.startTime = request.startTime;
+    if (request.durationSeconds != null) bodyPayload.durationSeconds = request.durationSeconds;
+    if (request.twapBucketCount != null) bodyPayload.twapBucketCount = request.twapBucketCount;
+    if (request.triggers) bodyPayload.triggers = request.triggers;
+    if (request.attachedBracket) bodyPayload.attachedBracket = request.attachedBracket;
+    if (request.forceMinimalAllowance != null) {
+      bodyPayload.forceMinimalAllowance = request.forceMinimalAllowance;
+    }
+    if (request.evmUsePermit2 != null) bodyPayload.evmUsePermit2 = request.evmUsePermit2;
 
     let res: Response;
     try {
@@ -164,18 +234,7 @@ export class DefinitiveClient implements IDefinitiveClient {
     }
 
     if (!res.ok) {
-      const errMsg =
-        typeof data?.message === "string"
-          ? data.message
-          : typeof data?.error === "string"
-            ? data.error
-            : typeof data?.error?.message === "string"
-              ? data.error.message
-              : typeof data?.error?.details === "object"
-                ? JSON.stringify(data.error.details)
-                : typeof data?.error === "object"
-                  ? JSON.stringify(data.error)
-                  : `Flash quote failed with HTTP ${res.status}`;
+      const errMsg = flashErrorMessage(data, res.status);
       throw new DefinitiveApiError("QUOTE_REJECTED", errMsg, res.status, data);
     }
 
@@ -203,6 +262,10 @@ export class DefinitiveClient implements IDefinitiveClient {
       data.orderTypedData ||
       data.order_typed_data ||
       undefined;
+    const orderTypedDataRaw =
+      typeof rawOrderTypedData === "string" ? rawOrderTypedData : undefined;
+    const toLeg = data.to as { amount?: string } | undefined;
+    const fromLeg = data.from as { asset?: string; amount?: string; notional?: string } | undefined;
 
     const wrapRaw = (data.wrap || {}) as Record<string, any>;
     const rawWrap =
@@ -222,6 +285,9 @@ export class DefinitiveClient implements IDefinitiveClient {
           }
         : null,
       orderTypedData: rawOrderTypedData,
+      orderTypedDataRaw,
+      permitTypedData:
+        typeof evmRaw.permitTypedData === "string" ? evmRaw.permitTypedData : null,
     };
 
     const normalizedWrap = rawWrap
@@ -245,12 +311,43 @@ export class DefinitiveClient implements IDefinitiveClient {
       orderType: data.orderType || request.orderType || "limit",
       limitNotionalPrice: data.limitNotionalPrice || request.limitNotionalPrice,
       funderAddress: data.funderAddress || request.funderAddress,
-      expectedOutputAmount: data.expectedOutputAmount != null ? String(data.expectedOutputAmount) : undefined,
+      from: fromLeg?.amount
+        ? {
+            asset: String(fromLeg.asset ?? ""),
+            amount: String(fromLeg.amount),
+            notional: String((fromLeg as { notional?: string }).notional ?? ""),
+          }
+        : undefined,
+      to: toLeg?.amount
+        ? {
+            asset: String((data.to as { asset?: string }).asset ?? ""),
+            amount: String(toLeg.amount),
+            notional: String((data.to as { notional?: string }).notional ?? ""),
+          }
+        : undefined,
+      expectedOutputAmount:
+        data.expectedOutputAmount != null
+          ? String(data.expectedOutputAmount)
+          : toLeg?.amount != null
+            ? String(toLeg.amount)
+            : undefined,
       minimumOutputAmount: data.minimumOutputAmount != null ? String(data.minimumOutputAmount) : undefined,
-      priceImpactPercentage: data.priceImpactPercentage != null ? String(data.priceImpactPercentage) : undefined,
+      priceImpactPercentage:
+        data.priceImpactPercentage != null
+          ? String(data.priceImpactPercentage)
+          : data.estimatedPriceImpact != null
+            ? String(data.estimatedPriceImpact)
+            : undefined,
+      estimatedPriceImpact:
+        data.estimatedPriceImpact != null ? String(data.estimatedPriceImpact) : null,
+      recommendedSlippage:
+        data.recommendedSlippage != null ? String(data.recommendedSlippage) : null,
       fees: data.fees,
+      bridgeQuoteId: data.bridgeQuoteId ?? null,
+      setupTxs: Array.isArray(data.setupTxs) ? data.setupTxs.map(String) : null,
       evm: normalizedEvm,
       wrap: normalizedWrap,
+      attachedBracket: (data.attachedBracket as Record<string, unknown> | null) ?? null,
       validUntil: data.validUntil || data.expiresAt,
       rawPayload: data,
     };
@@ -280,7 +377,10 @@ export class DefinitiveClient implements IDefinitiveClient {
     };
 
     if (request.evmOrderTypedData) {
-      bodyPayload.evmOrderTypedData = request.evmOrderTypedData;
+      bodyPayload.evmOrderTypedData =
+        typeof request.evmOrderTypedData === "string"
+          ? request.evmOrderTypedData
+          : JSON.stringify(request.evmOrderTypedData);
     }
     if (request.limitNotionalPrice) {
       bodyPayload.limitNotionalPrice = request.limitNotionalPrice;
@@ -291,6 +391,17 @@ export class DefinitiveClient implements IDefinitiveClient {
     if (request.flashIntegratorFeeBps) {
       bodyPayload.flashIntegratorFeeBps = request.flashIntegratorFeeBps;
     }
+    if (request.evmPermitTypedData) bodyPayload.evmPermitTypedData = request.evmPermitTypedData;
+    if (request.evmPermitSignature) bodyPayload.evmPermitSignature = request.evmPermitSignature;
+    if (request.limitCrossPrice) bodyPayload.limitCrossPrice = request.limitCrossPrice;
+    if (request.maxSlippage) bodyPayload.maxSlippage = request.maxSlippage;
+    if (request.maxPriceImpact) bodyPayload.maxPriceImpact = request.maxPriceImpact;
+    if (request.recipientAddress) bodyPayload.recipientAddress = request.recipientAddress;
+    if (request.bridgeQuoteId) bodyPayload.bridgeQuoteId = request.bridgeQuoteId;
+    if (request.startTime) bodyPayload.startTime = request.startTime;
+    if (request.twapBucketCount != null) bodyPayload.twapBucketCount = request.twapBucketCount;
+    if (request.triggers) bodyPayload.triggers = request.triggers;
+    if (request.attachedBracket) bodyPayload.attachedBracket = request.attachedBracket;
 
     let res: Response;
     try {
@@ -394,26 +505,51 @@ export class DefinitiveClient implements IDefinitiveClient {
           throw new DefinitiveApiError("ORDER_NOT_FOUND", errMsg, res.status, data);
         }
 
-        const fills = Array.isArray(data.fills) ? data.fills : [];
+        const order =
+          data.order && typeof data.order === "object" ? (data.order as Record<string, any>) : data;
+        const fills = Array.isArray(data.fills)
+          ? data.fills
+          : Array.isArray(order.fills)
+            ? order.fills
+            : [];
         const transactionHash =
-          data.transactionHash ||
-          data.txHash ||
+          order.transactionHash ||
+          order.txHash ||
+          fills.find((f: any) => f.transactionId || f.txHash)?.transactionId ||
           fills.find((f: any) => f.txHash)?.txHash ||
           null;
+        const rawStatus = String(order.status ?? data.status ?? "");
+        const filled = (order.filled ?? null) as Record<string, string | null> | null;
 
         return {
-          orderId: String(data.orderId || data.id || orderId),
-          status: mapFlashStatusToOrderStatus(data.status),
-          targetChain: data.targetChain,
-          targetAsset: data.targetAsset,
-          contraAsset: data.contraAsset,
-          side: data.side,
-          qty: data.qty != null ? String(data.qty) : undefined,
-          executedQty: data.executedQty != null ? String(data.executedQty) : undefined,
+          orderId: String(order.orderId || order.id || data.orderId || orderId),
+          status: mapFlashStatusToOrderStatus(rawStatus),
+          rawStatus,
+          targetChain: order.targetChain,
+          targetAsset: order.targetAsset,
+          contraAsset: order.contraAsset,
+          side: order.side,
+          qty: order.qty != null ? String(order.qty) : undefined,
+          executedQty:
+            filled?.targetAmount != null
+              ? String(filled.targetAmount)
+              : order.executedQty != null
+                ? String(order.executedQty)
+                : undefined,
           transactionHash,
           fills,
-          failureReason: data.failureReason || data.rejectReason,
-          updatedAt: data.updatedAt,
+          filled: filled
+            ? {
+                targetAmount: filled.targetAmount,
+                contraAmount: filled.contraAmount,
+                averagePrice: filled.averagePrice,
+                averageNotionalPrice: filled.averageNotionalPrice,
+              }
+            : undefined,
+          closeReason: order.closeReason ?? null,
+          failureReason: order.failureReason || order.closeReason || data.rejectReason,
+          updatedAt: order.updatedAt || order.closedAt,
+          cancellable: isFlashStatusCancellable(rawStatus),
         };
       } catch (err) {
         lastError = err;
@@ -433,6 +569,97 @@ export class DefinitiveClient implements IDefinitiveClient {
       `Failed to retrieve order status from Flash after 2 attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
       502,
     );
+  }
+
+  async listOrders(params: {
+    funderAddress?: string;
+    statuses?: string;
+    pageSize?: number;
+    pageToken?: string;
+  }): Promise<{ orders: Array<Record<string, unknown>>; nextPageToken: string | null }> {
+    this.assertConfigured();
+    const query = new URLSearchParams();
+    if (params.funderAddress) query.set("funderAddress", params.funderAddress);
+    if (params.statuses) query.set("statuses", params.statuses);
+    if (params.pageSize) query.set("pageSize", String(params.pageSize));
+    if (params.pageToken) query.set("pageToken", params.pageToken);
+    const url = `${this.baseUrl}/orders?${query.toString()}`;
+    const data = await this.readJson(url);
+    return {
+      orders: Array.isArray(data.orders) ? data.orders : [],
+      nextPageToken: typeof data.nextPageToken === "string" ? data.nextPageToken : null,
+    };
+  }
+
+  async cancelOrder(
+    orderId: string,
+    body: { cancelMessage: string; userSignature: string },
+  ): Promise<{ ok: boolean; raw?: Record<string, unknown> }> {
+    this.assertConfigured();
+    const url = `${this.baseUrl}/orders/${encodeURIComponent(orderId)}/cancel`;
+    const data = await this.sendJson(url, body, "CANCEL_REJECTED");
+    return { ok: data.ok === true, raw: data };
+  }
+
+  async submitSetupTransaction(signedSetupTx: string): Promise<{ status: string }> {
+    this.assertConfigured();
+    const data = await this.sendJson(
+      `${this.baseUrl}/setup-transaction`,
+      { signedSetupTx },
+      "SETUP_REJECTED",
+    );
+    return { status: String(data.status ?? "pending") };
+  }
+
+  private async readJson(url: string): Promise<Record<string, any>> {
+    const res = await this.fetchWithTimeout(url, {
+      method: "GET",
+      headers: {
+        "content-type": "application/json",
+        "x-definitive-api-key": this.apiKey!,
+      },
+    });
+    return this.parseResponse(res, "ORDER_NOT_FOUND");
+  }
+
+  private async sendJson(
+    url: string,
+    body: unknown,
+    errorCode: string,
+  ): Promise<Record<string, any>> {
+    const res = await this.fetchWithTimeout(url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-definitive-api-key": this.apiKey!,
+      },
+      body: JSON.stringify(body),
+    });
+    return this.parseResponse(res, errorCode);
+  }
+
+  private async parseResponse(res: Response, errorCode: string): Promise<Record<string, any>> {
+    let data: Record<string, any>;
+    try {
+      data = (await res.json()) as Record<string, any>;
+    } catch {
+      throw new DefinitiveApiError(
+        "INVALID_RESPONSE",
+        `Definitive Flash returned non-JSON response with HTTP ${res.status}`,
+        res.status,
+      );
+    }
+    if (!res.ok) {
+      const errMsg =
+        typeof data?.error?.message === "string"
+          ? data.error.message
+          : typeof data?.message === "string"
+            ? data.message
+            : `Flash request failed with HTTP ${res.status}`;
+      const code = res.status === 429 ? "RATE_LIMITED" : errorCode;
+      throw new DefinitiveApiError(code, errMsg, res.status, data?.error ?? data);
+    }
+    return data;
   }
 }
 

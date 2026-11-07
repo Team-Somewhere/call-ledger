@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  FLASH_ORDER_TYPES,
   ORDER_PROVIDERS,
   ORDER_STATUSES,
   ORDER_TYPES,
@@ -26,8 +27,29 @@ export const createOrderSchema = z.object({
 export const flashSideSchema = z.enum(["buy", "sell"]);
 export type FlashSide = z.infer<typeof flashSideSchema>;
 
-export const flashOrderTypeSchema = z.enum(["limit", "market"]);
+export const flashOrderTypeSchema = z.enum(FLASH_ORDER_TYPES);
 export type FlashOrderType = z.infer<typeof flashOrderTypeSchema>;
+
+const priceTriggerSchema = z
+  .object({
+    notionalPrice: z.string().optional(),
+    crossPrice: z.string().optional(),
+    triggerType: z.enum(["upper", "lower"]),
+    limitPrice: z.string().optional(),
+  })
+  .refine((value) => Boolean(value.notionalPrice) !== Boolean(value.crossPrice), {
+    message: "Each trigger needs exactly one of notionalPrice or crossPrice",
+  });
+
+const attachedLegSchema = z
+  .object({
+    notionalPrice: z.string().optional(),
+    crossPrice: z.string().optional(),
+    limitPrice: z.string().optional(),
+  })
+  .refine((value) => Boolean(value.notionalPrice) !== Boolean(value.crossPrice), {
+    message: "Each bracket leg needs exactly one of notionalPrice or crossPrice",
+  });
 
 /**
  * Validated quote request sent to Definitive Flash API /v1/quote.
@@ -59,8 +81,21 @@ export const flashQuoteRequestSchema = z.object({
     .min(1, "Funder wallet address is required")
     .regex(/^0x[a-fA-F0-9]{40}$/, "Must be a valid EVM wallet address"),
   maxSlippage: z.string().optional(),
+  maxPriceImpact: z.string().optional(),
   expireTime: z.string().optional(),
   flashIntegratorFeeBps: z.string().optional(),
+  signalId: z.string().uuid().optional().nullable(),
+  startTime: z.string().optional(),
+  durationSeconds: z.number().int().min(300).optional(),
+  twapBucketCount: z.number().int().min(2).max(2560).optional(),
+  triggers: z.array(priceTriggerSchema).max(2).optional(),
+  attachedBracket: z
+    .object({
+      takeProfit: attachedLegSchema,
+      stopLoss: attachedLegSchema,
+      expireTime: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type FlashQuoteRequestInput = z.infer<typeof flashQuoteRequestSchema>;
@@ -94,8 +129,27 @@ export const flashSubmitOrderRequestSchema = z.object({
   limitNotionalPrice: z.string().optional(),
   expireTime: z.string().optional(),
   flashIntegratorFeeBps: z.string().optional(),
+  evmPermitTypedData: z.string().optional(),
+  evmPermitSignature: z.string().regex(/^0x[a-fA-F0-9]+$/).optional(),
+  attachedBracket: z
+    .object({
+      takeProfit: attachedLegSchema,
+      stopLoss: attachedLegSchema,
+      userSignature: z.string().min(1),
+      salt: z.string().optional(),
+      deadline: z.string().min(1),
+      signedMaxFromAmount: z.string().min(1),
+      evmPermitSignature: z.string().optional(),
+      evmPermitTypedData: z.string().optional(),
+    })
+    .optional(),
   signalId: z.string().uuid().optional().nullable(),
   strategyId: z.string().uuid().optional().nullable(),
+});
+
+export const flashCancelRequestSchema = z.object({
+  cancelMessage: z.string().min(1),
+  userSignature: z.string().regex(/^0x[a-fA-F0-9]+$/),
 });
 
 export type FlashSubmitOrderRequestInput = z.input<

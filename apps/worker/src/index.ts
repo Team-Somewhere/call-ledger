@@ -4,6 +4,7 @@ import {
   closeDatabaseConnection,
 } from "@call-ledger/database";
 import { env } from "./config/env";
+import { reconcileFlashOrders } from "./jobs/flash-reconciliation.job";
 import { WorkerPollingService } from "./jobs/creator-polling.job";
 import { SourceMonitoringWorker } from "./jobs/source-monitoring.job";
 import { logger } from "./services/logger";
@@ -14,6 +15,7 @@ const legacyMaintenance = new WorkerPollingService();
 let activeCycle: Promise<number> | null = null;
 let cycleTimer: NodeJS.Timeout | null = null;
 let maintenanceTimer: NodeJS.Timeout | null = null;
+let flashTimer: NodeJS.Timeout | null = null;
 let shuttingDown = false;
 let lastCycleAt: Date | null = null;
 let lastCycleProcessed = 0;
@@ -128,6 +130,8 @@ async function start(): Promise<void> {
     () => void legacyMaintenance.cleanupExpiredOAuth(),
     10 * 60 * 1000,
   );
+  void reconcileFlashOrders();
+  flashTimer = setInterval(() => void reconcileFlashOrders(), 30_000);
 
   if (!env.MONITORING_WORKER_ENABLED) {
     logger.info(
@@ -151,6 +155,7 @@ async function shutdown(signal: string): Promise<void> {
   worker.stop();
   if (cycleTimer) clearInterval(cycleTimer);
   if (maintenanceTimer) clearInterval(maintenanceTimer);
+  if (flashTimer) clearInterval(flashTimer);
   logger.info(`[WORKER] Received ${signal}; waiting for the active monitoring cycle.`);
   if (activeCycle) await activeCycle;
   await closeDatabaseConnection();

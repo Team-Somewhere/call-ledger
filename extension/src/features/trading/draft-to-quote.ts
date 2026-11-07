@@ -32,8 +32,14 @@ function pickAsset(
 ): VerifiedAsset | null {
   const chainAssets = config.verifiedAssets[chain];
   if (!chainAssets) return null;
+  const aliases: Record<string, string> = {
+    BITCOIN: "BTC",
+    XBT: "BTC",
+    ETHER: "ETH",
+    ETHERUM: "ETH",
+  };
   const upper = symbol.toUpperCase();
-  return chainAssets[upper] ?? null;
+  return chainAssets[upper] ?? chainAssets[aliases[upper] ?? ""] ?? null;
 }
 
 /** Convert a parsed strategy draft + amount into a Flash quote payload. */
@@ -42,7 +48,7 @@ export function buildQuoteRequest(params: {
   funderAddress: string;
   qtyUsd: string;
   config: OrderConfig;
-}): { ok: true; request: BuiltQuoteRequest } | { ok: false; message: string } {
+}): { ok: true; request: BuiltQuoteRequest; note?: string } | { ok: false; message: string } {
   const { draft, funderAddress, qtyUsd, config } = params;
 
   if (!config.configured) {
@@ -88,10 +94,20 @@ export function buildQuoteRequest(params: {
     return { ok: false, message: "Enter a valid positive amount." };
   }
 
-  const orderType =
-    draft.orderType.status === "known" && draft.orderType.value === "market"
-      ? "market"
-      : "limit";
+  if (side === "buy" && Number(qty) < 0.05) {
+    return {
+      ok: false,
+      message:
+        "Amount is too small. Flash rejects buys under about 0.05 USDC because the trading fee is larger than the tokens you would receive.",
+    };
+  }
+
+  const explicitMarket =
+    draft.orderType.status === "known" && draft.orderType.value === "market";
+  const hasEntry = draft.entryPrice.status === "known" && draft.entryPrice.value > 0;
+  const limitWithoutEntry =
+    draft.orderType.status === "known" && draft.orderType.value === "limit" && !hasEntry;
+  const orderType = explicitMarket || !hasEntry ? "market" : "limit";
 
   const request: BuiltQuoteRequest = {
     targetChain: target.chain,
@@ -109,5 +125,11 @@ export function buildQuoteRequest(params: {
     request.limitNotionalPrice = String(draft.entryPrice.value);
   }
 
-  return { ok: true, request };
+  return {
+    ok: true,
+    request,
+    note: limitWithoutEntry
+      ? "No entry price in the post, so this quote is a market order instead of a limit order."
+      : undefined,
+  };
 }

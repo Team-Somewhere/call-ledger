@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertCircle, ExternalLink, Loader2, Radio } from "lucide-react";
+import { extractActionableSignal } from "@call-ledger/shared";
 import { SourceBadge } from "../../components/source-badge";
 import {
   api,
@@ -324,7 +326,32 @@ export default function ActivityPage() {
                         {post.content}
                       </p>
                     )}
-                    <div className="mt-3">
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      {post.content && extractActionableSignal(post.content) && (
+                        <Link
+                          href={`/trade?draft=${encodeURIComponent(
+                            JSON.stringify({
+                              sourcePost: {
+                                id: post.externalPostId,
+                                url: post.canonicalUrl,
+                                author: post.authorHandle,
+                                text: post.content,
+                              },
+                              chain: "base",
+                              targetSymbol: extractActionableSignal(post.content)?.asset || "ETH",
+                              direction: extractActionableSignal(post.content)?.side || "buy",
+                              orderType: "limit",
+                              limitPrice: extractActionableSignal(post.content)?.entry,
+                              stopLoss: extractActionableSignal(post.content)?.stopLoss,
+                              takeProfit: extractActionableSignal(post.content)?.takeProfit,
+                              classification: "TRADE_SIGNAL",
+                            }),
+                          )}`}
+                          className="border border-[#171717] bg-[#171717] px-2 py-1 text-[10px] font-bold text-[#FFFAF3]"
+                        >
+                          COPY TRADE
+                        </Link>
+                      )}
                       {post.canonicalUrl && (
                         <a
                           href={post.canonicalUrl}

@@ -56,17 +56,40 @@ export type OrderProvider = (typeof ORDER_PROVIDERS)[number];
 
 export const ORDER_STATUSES = [
   "PENDING_SIGNATURE",
+  "AWAITING_SETUP",
   "SUBMITTED",
   "PENDING",
-  "FILLED",
   "PARTIALLY_FILLED",
-  "FAILED",
+  "FILLED",
+  "PENDING_CANCELLATION",
   "CANCELLED",
+  "FAILED",
+  "EXPIRED",
 ] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-export const ORDER_TYPES = ["MARKET", "LIMIT"] as const;
+export const ORDER_TYPES = [
+  "MARKET",
+  "LIMIT",
+  "TWAP",
+  "STOP",
+  "STOP_LOSS",
+  "TAKE_PROFIT",
+  "BRACKET",
+] as const;
 export type OrderType = (typeof ORDER_TYPES)[number];
+
+/** Flash order-type enum. DCA is not a current Flash order type. */
+export const FLASH_ORDER_TYPES = [
+  "market",
+  "limit",
+  "twap",
+  "stop",
+  "stop-loss",
+  "take-profit",
+  "bracket",
+] as const;
+export type FlashOrderTypeName = (typeof FLASH_ORDER_TYPES)[number];
 
 export const POSITION_STATUSES = ["OPEN", "CLOSED"] as const;
 export type PositionStatus = (typeof POSITION_STATUSES)[number];

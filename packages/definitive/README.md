@@ -11,7 +11,7 @@ Source of Truth:
 
 ### 1. Base URL & Authentication
 - **Base URL**: `https://flash.definitive.fi/v1`
-- **Auth Header**: `x-definitive-api-key: <DEFINITIVE_API_KEY>`
+- **Auth Header**: `x-definitive-api-key`. The server reads `DEFINITIVE_FLASH_API_KEY`, then `DEFINITIVE_API_KEY`.
 - **Security Constraint**: The API key is strictly server-side (`apps/api` environment). It is **never** exposed as `NEXT_PUBLIC_*` or packaged into the Chrome extension bundle.
 
 ### 2. Endpoints & Request/Response Contracts
@@ -25,7 +25,7 @@ Source of Truth:
   - `contraAsset`: Contract address of the spent asset (e.g., USDC `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` on Base).
   - `side`: Trade direction: `"buy"` or `"sell"`.
   - `qty`: Decimal token quantity string of the spent asset (`contraAsset` on buy, `targetAsset` on sell).
-  - `orderType`: `"limit"` (advanced order priority for hackathon demo) or `"market"`.
+  - `orderType`: `market`, `limit`, `twap`, `stop`, `stop-loss`, `take-profit`, or `bracket`. DCA is not a current Flash order type. Solana signing is not implemented in the web app.
   - `limitNotionalPrice`: USD target price for limit execution (e.g. `"2400"`).
   - `funderAddress`: The user's wallet address funding and signing the order.
   - `flashIntegratorFeeBps`: Optional integrator revenue share in basis points (e.g., `"50"`). Must match between `/quote` and `/order`.

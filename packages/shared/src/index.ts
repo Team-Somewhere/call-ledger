@@ -8,6 +8,7 @@ export * from "./types/creator";
 export * from "./types/signal";
 export * from "./types/strategy";
 export * from "./types/order";
+export * from "./trading/actionable-signal";
 export * from "./types/position";
 export * from "./types/arkiv";
 export * from "./types/api";

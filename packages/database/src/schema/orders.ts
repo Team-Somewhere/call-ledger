@@ -2,7 +2,9 @@ import {
   index,
   numeric,
   pgTable,
+  jsonb,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -43,6 +45,10 @@ export const orders = pgTable(
       .default("PENDING_SIGNATURE")
       .notNull(),
     transactionHash: varchar("transaction_hash", { length: 255 }),
+    flashQuoteId: varchar("flash_quote_id", { length: 255 }),
+    orderParameters: jsonb("order_parameters"),
+    rawStatus: varchar("raw_status", { length: 80 }),
+    closeReason: varchar("close_reason", { length: 160 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -56,6 +62,7 @@ export const orders = pgTable(
     index("orders_strategy_id_idx").on(table.strategyId),
     index("orders_status_idx").on(table.status),
     index("orders_provider_order_id_idx").on(table.providerOrderId),
+    uniqueIndex("orders_flash_quote_id_uidx").on(table.flashQuoteId),
   ],
 );
 

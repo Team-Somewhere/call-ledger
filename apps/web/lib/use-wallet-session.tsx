@@ -49,6 +49,7 @@ export interface WalletSessionContextValue extends SessionState {
   disconnect: () => void;
   refresh: () => Promise<void>;
   signTypedData: (typedData: Record<string, unknown> | string) => Promise<string>;
+  signMessage: (message: string) => Promise<string>;
   sendTransaction: (tx: { to: string; data?: string; value?: string }) => Promise<string>;
   switchChain: (targetChainId: number) => Promise<boolean>;
 }
@@ -419,6 +420,32 @@ export function WalletSessionProvider({
     [state.address],
   );
 
+  const signMessage = useCallback(
+    async (message: string): Promise<string> => {
+      const provider = getEthereumProvider();
+      if (!provider) throw new Error("No EIP-1193 wallet detected.");
+      let signingAddress = state.address;
+      if (!signingAddress) {
+        const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
+        signingAddress = accounts?.[0]?.toLowerCase() ?? null;
+      }
+      if (!signingAddress) throw new Error("Wallet not connected.");
+      try {
+        return (await provider.request({
+          method: "personal_sign",
+          params: [message, signingAddress],
+        })) as string;
+      } catch (err: unknown) {
+        const anyErr = err as { code?: number; message?: string };
+        if (anyErr.code === 4001) {
+          throw new Error("Cancellation signature was rejected in your wallet.");
+        }
+        throw new Error(anyErr.message || "Failed to sign the cancellation message.");
+      }
+    },
+    [state.address],
+  );
+
   const sendTransaction = useCallback(
     async (tx: { to: string; data?: string; value?: string }): Promise<string> => {
       const provider = getEthereumProvider();
@@ -497,10 +524,11 @@ export function WalletSessionProvider({
       disconnect,
       refresh,
       signTypedData,
+      signMessage,
       sendTransaction,
       switchChain,
     }),
-    [state, connect, connectGuest, disconnect, refresh, signTypedData, sendTransaction, switchChain],
+    [state, connect, connectGuest, disconnect, refresh, signTypedData, signMessage, sendTransaction, switchChain],
   );
 
   return (
@@ -526,6 +554,9 @@ export function useWalletSession(): WalletSessionContextValue {
       disconnect: () => {},
       refresh: async () => {},
       signTypedData: async () => {
+        throw new Error("Wallet session provider not mounted");
+      },
+      signMessage: async () => {
         throw new Error("Wallet session provider not mounted");
       },
       sendTransaction: async () => {

@@ -102,8 +102,9 @@ function FollowingContent() {
           Following
         </h1>
         <p className="text-xs text-[#78716C] font-sans max-w-xl">
-          Creators you follow on CallLedger. This is not the same as following
-          them on X — CallLedger never performs X follow actions.
+          Creators you follow on CallLedger. Actionable posts appear in Activity,
+          where Copy Trade opens a review you must confirm. CallLedger never
+          follows accounts on X and never trades without your signature.
         </p>
       </div>
 

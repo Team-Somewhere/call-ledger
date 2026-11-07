@@ -1,4 +1,4 @@
-import type { OrderStatus } from "@call-ledger/shared";
+import type { FlashOrderTypeName, OrderStatus } from "@call-ledger/shared";
 
 /**
  * Definitive Flash client configuration.
@@ -15,6 +15,19 @@ export interface DefinitiveClientConfig {
  * Request parameters for Definitive Flash /v1/quote.
  * Follows verified official Definitive Flash OpenAPI schema.
  */
+export interface FlashPriceTrigger {
+  notionalPrice?: string;
+  crossPrice?: string;
+  triggerType: "upper" | "lower";
+  limitPrice?: string;
+}
+
+export interface FlashAttachedBracketLeg {
+  notionalPrice?: string;
+  crossPrice?: string;
+  limitPrice?: string;
+}
+
 export interface FlashQuoteRequest {
   targetChain: string;
   contraChain: string;
@@ -22,14 +35,27 @@ export interface FlashQuoteRequest {
   contraAsset: string;
   side: "buy" | "sell";
   qty: string;
-  orderType?: "limit" | "market";
+  orderType?: FlashOrderTypeName;
   limitNotionalPrice?: string;
   limitCrossPrice?: string;
   funderAddress: string;
   maxSlippage?: string;
+  maxPriceImpact?: string;
   expireTime?: string;
   flashIntegratorFeeBps?: string;
   recipientAddress?: string;
+  startTime?: string;
+  durationSeconds?: number;
+  twapBucketCount?: number;
+  triggers?: FlashPriceTrigger[];
+  attachedBracket?: {
+    takeProfit: FlashAttachedBracketLeg;
+    stopLoss: FlashAttachedBracketLeg;
+    expireTime?: string;
+  };
+  /** Prefer a sized allowance over an unlimited grant. */
+  forceMinimalAllowance?: boolean;
+  evmUsePermit2?: boolean;
 }
 
 /**
@@ -59,19 +85,29 @@ export interface FlashQuoteResponse {
   expectedOutputAmount?: string;
   minimumOutputAmount?: string;
   priceImpactPercentage?: string;
+  from?: { asset: string; amount: string; notional: string };
+  to?: { asset: string; amount: string; notional: string };
   fees?: {
     estimatedFeeNotional?: string;
     integratorFeeBps?: string;
     protocolFeeNotional?: string;
   };
+  estimatedPriceImpact?: string | null;
+  recommendedSlippage?: string | null;
+  bridgeQuoteId?: string | null;
+  setupTxs?: string[] | null;
   evm?: {
     orderTypedData?: EvmOrderTypedData | string;
+    /** Exact string to echo on submit when Flash returned a string. */
+    orderTypedDataRaw?: string;
+    permitTypedData?: string | null;
     approveTx?: {
       to: string;
       data: string;
       value?: string;
     } | null;
   };
+  attachedBracket?: Record<string, unknown> | null;
   wrap?: {
     evmTx?: {
       to: string;
@@ -93,14 +129,25 @@ export interface FlashSubmitOrderRequest {
   contraAsset: string;
   side: "buy" | "sell";
   qty: string;
-  orderType: "limit" | "market";
+  orderType: FlashOrderTypeName;
   funderAddress: string;
   quoteId: string;
   userSignature: string;
   evmOrderTypedData?: EvmOrderTypedData | Record<string, unknown> | string;
+  evmPermitTypedData?: string;
+  evmPermitSignature?: string;
   limitNotionalPrice?: string;
+  limitCrossPrice?: string;
+  maxSlippage?: string;
+  maxPriceImpact?: string;
   expireTime?: string;
   flashIntegratorFeeBps?: string;
+  recipientAddress?: string;
+  bridgeQuoteId?: string;
+  startTime?: string;
+  twapBucketCount?: number;
+  triggers?: FlashPriceTrigger[];
+  attachedBracket?: Record<string, unknown>;
 }
 
 /**
@@ -118,10 +165,22 @@ export interface FlashSubmitOrderResponse {
  */
 export interface FlashOrderFill {
   fillId?: string;
+  orderId?: string;
+  rootOrderId?: string;
   txHash?: string;
+  transactionId?: string;
   amount?: string;
+  targetAmount?: string;
+  contraAmount?: string;
   price?: string;
+  fillPrice?: string;
+  notional?: string;
+  feeAmount?: string;
+  feeNotional?: string;
+  integratorFeeNotional?: string;
   timestamp?: string;
+  filledAt?: string;
+  status?: string;
 }
 
 /**
@@ -138,17 +197,46 @@ export interface FlashOrderStatusResponse {
   executedQty?: string;
   transactionHash?: string | null;
   fills?: FlashOrderFill[];
+  filled?: {
+    targetAmount?: string | null;
+    contraAmount?: string | null;
+    averagePrice?: string | null;
+    averageNotionalPrice?: string | null;
+  };
+  rawStatus?: string;
+  closeReason?: string | null;
   failureReason?: string;
   updatedAt?: string;
+  cancellable?: boolean;
 }
 
 /**
  * Contract for the Definitive Flash trading client.
  */
+export interface FlashCancelResult {
+  ok: boolean;
+  raw?: Record<string, unknown>;
+}
+
+export interface FlashSetupResult {
+  status: "confirmed" | "pending" | string;
+}
+
 export interface IDefinitiveClient {
   isConfigured(): boolean;
   getQuote(request: FlashQuoteRequest): Promise<FlashQuoteResponse>;
   submitOrder(request: FlashSubmitOrderRequest): Promise<FlashSubmitOrderResponse>;
   getOrderStatus(orderId: string): Promise<FlashOrderStatusResponse>;
+  listOrders(params: {
+    funderAddress?: string;
+    statuses?: string;
+    pageSize?: number;
+    pageToken?: string;
+  }): Promise<{ orders: Array<Record<string, unknown>>; nextPageToken: string | null }>;
+  cancelOrder(
+    orderId: string,
+    body: { cancelMessage: string; userSignature: string },
+  ): Promise<FlashCancelResult>;
+  submitSetupTransaction(signedSetupTx: string): Promise<FlashSetupResult>;
 }
 

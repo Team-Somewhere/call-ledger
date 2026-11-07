@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import {
+  flashCancelRequestSchema,
   flashQuoteRequestSchema,
   flashSubmitOrderRequestSchema,
   uuidParamSchema,
@@ -7,10 +8,12 @@ import {
   VERIFIED_CHAINS,
 } from "@call-ledger/shared";
 import {
+  cancelUserOrder,
   getOrderWithStatusSync,
   isDefinitiveConfigured,
   listUserOrders,
   OrderServiceError,
+  portfolioSummary,
   requestFlashQuote,
   submitFlashOrder,
 } from "../services/order.service";
@@ -39,7 +42,7 @@ export async function getQuote(req: Request, res: Response): Promise<void> {
   const parsed = flashQuoteRequestSchema.parse(req.body);
 
   try {
-    const quote = await requestFlashQuote(user.address, parsed);
+    const quote = await requestFlashQuote(user.address, parsed, user.id);
     sendSuccess(res, quote);
   } catch (err) {
     if (err instanceof OrderServiceError) {
@@ -99,5 +102,32 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
   const user = req.auth!;
   const orderList = await listUserOrders(user.id);
   sendSuccess(res, orderList);
+}
+
+export async function getPortfolio(req: Request, res: Response): Promise<void> {
+  const user = req.auth!;
+  sendSuccess(res, await portfolioSummary(user.id));
+}
+
+export async function cancelOrder(req: Request, res: Response): Promise<void> {
+  const user = req.auth!;
+  const { id } = uuidParamSchema.parse(req.params);
+  const body = flashCancelRequestSchema.parse(req.body);
+  try {
+    const result = await cancelUserOrder(
+      user.id,
+      id,
+      user.address,
+      body.cancelMessage,
+      body.userSignature,
+    );
+    sendSuccess(res, result);
+  } catch (err) {
+    if (err instanceof OrderServiceError) {
+      sendError(res, err.code, err.message, err.statusCode, err.details);
+      return;
+    }
+    throw err;
+  }
 }
 

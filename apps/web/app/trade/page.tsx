@@ -34,16 +34,55 @@ import {
   type VerifiedAsset,
 } from "@call-ledger/shared";
 
+type FlashOrderChoice =
+  | "market"
+  | "limit"
+  | "twap"
+  | "stop"
+  | "stop-loss"
+  | "take-profit"
+  | "bracket";
+
 interface TradeFormState {
   chain: string;
   targetSymbol: string;
   contraSymbol: string;
   side: "buy" | "sell";
-  orderType: "limit" | "market";
+  orderType: FlashOrderChoice;
   limitPrice: string;
+  stopPrice: string;
+  takeProfitPrice: string;
+  twapMinutes: string;
+  attachProtection: boolean;
   qty: string;
   maxSlippage: string;
   expiryHours: string;
+}
+
+function buildTriggers(form: TradeFormState) {
+  if (form.orderType === "stop") {
+    return form.stopPrice
+      ? [{ notionalPrice: form.stopPrice, triggerType: "upper" as const }]
+      : undefined;
+  }
+  if (form.orderType === "stop-loss") {
+    return form.stopPrice
+      ? [{ notionalPrice: form.stopPrice, triggerType: "lower" as const }]
+      : undefined;
+  }
+  if (form.orderType === "take-profit") {
+    return form.takeProfitPrice
+      ? [{ notionalPrice: form.takeProfitPrice, triggerType: "upper" as const }]
+      : undefined;
+  }
+  if (form.orderType === "bracket") {
+    if (!form.stopPrice || !form.takeProfitPrice) return undefined;
+    return [
+      { notionalPrice: form.takeProfitPrice, triggerType: "upper" as const },
+      { notionalPrice: form.stopPrice, triggerType: "lower" as const },
+    ];
+  }
+  return undefined;
 }
 
 function TradeContent() {
@@ -64,7 +103,7 @@ function TradeContent() {
   // Server configuration state
   const [config, setConfig] = useState<{
     configured: boolean;
-    supportedChains: typeof VERIFIED_CHAINS;
+    supportedChains: Record<string, { name: string; chainId: number; explorerBaseUrl: string }>;
     verifiedAssets: typeof VERIFIED_ASSETS;
   } | null>(null);
 
@@ -74,9 +113,13 @@ function TradeContent() {
     targetSymbol: handoffDraft?.targetSymbol || "WETH",
     contraSymbol: handoffDraft?.contraSymbol || "USDC",
     side: handoffDraft?.direction || "buy",
-    orderType: handoffDraft?.orderType || "limit",
-    limitPrice: handoffDraft?.limitPrice ? String(handoffDraft.limitPrice) : "2400",
-    qty: handoffDraft?.suggestedQty || "50",
+    orderType: (handoffDraft?.orderType as FlashOrderChoice) || "limit",
+    limitPrice: handoffDraft?.limitPrice ? String(handoffDraft.limitPrice) : "",
+    stopPrice: handoffDraft?.stopLoss ? String(handoffDraft.stopLoss) : "",
+    takeProfitPrice: handoffDraft?.takeProfit ? String(handoffDraft.takeProfit) : "",
+    twapMinutes: "30",
+    attachProtection: Boolean(handoffDraft?.stopLoss && handoffDraft?.takeProfit),
+    qty: "",
     maxSlippage: "0.01",
     expiryHours: "24",
   });
@@ -167,6 +210,16 @@ function TradeContent() {
       setQuoteError("Selected assets are invalid for this chain.");
       return;
     }
+    if (form.side === "buy" && Number(form.qty) > 0 && Number(form.qty) < 0.05) {
+      setQuoteError(
+        "Amount is too small. Flash rejects buys under about 0.05 USDC because the trading fee is larger than the tokens you would receive.",
+      );
+      return;
+    }
+    if ((form.orderType === "limit" || form.orderType === "twap") && !form.limitPrice) {
+      setQuoteError("Enter a limit price before requesting this quote.");
+      return;
+    }
 
     setIsQuoting(true);
     setQuoteError(null);
@@ -189,12 +242,30 @@ function TradeContent() {
         side: form.side,
         qty: form.qty,
         orderType: form.orderType,
-        limitNotionalPrice: form.orderType === "limit" ? form.limitPrice : undefined,
+        limitNotionalPrice:
+          form.orderType === "limit" || form.orderType === "twap" || form.orderType === "stop"
+            ? form.limitPrice || undefined
+            : undefined,
         funderAddress: activeAddress,
-        maxSlippage: form.maxSlippage,
+        maxSlippage: form.orderType === "market" ? form.maxSlippage : undefined,
+        maxPriceImpact: form.orderType === "market" ? undefined : form.maxSlippage,
+        signalId: searchParams.get("signalId"),
         expireTime:
-          form.expiryHours !== "gtc"
+          form.orderType !== "market" && form.orderType !== "twap" && form.expiryHours !== "gtc"
             ? new Date(Date.now() + parseInt(form.expiryHours, 10) * 3600 * 1000).toISOString()
+            : undefined,
+        durationSeconds:
+          form.orderType === "twap" ? Math.max(300, Number(form.twapMinutes) * 60) : undefined,
+        triggers: buildTriggers(form),
+        attachedBracket:
+          form.attachProtection &&
+          ["market", "limit", "twap"].includes(form.orderType) &&
+          form.stopPrice &&
+          form.takeProfitPrice
+            ? {
+                takeProfit: { notionalPrice: form.takeProfitPrice },
+                stopLoss: { notionalPrice: form.stopPrice },
+              }
             : undefined,
       });
 
@@ -326,13 +397,41 @@ function TradeContent() {
       await wallet.switchChain(chainMeta.chainId);
     }
 
+    if (quote.validUntil && Date.parse(quote.validUntil) <= Date.now()) {
+      setSigningError("This quote has expired. Request a fresh quote and review it again.");
+      return;
+    }
+    if (wallet.address && quote.funderAddress && wallet.address.toLowerCase() !== quote.funderAddress.toLowerCase()) {
+      setSigningError("The connected wallet changed. Request a new quote for this wallet.");
+      return;
+    }
+
     let signature = "";
+    let permitSignature: string | undefined;
+    let bracketSignature: string | undefined;
+    let bracketMeta: {
+      salt?: string;
+      deadline?: string;
+      signedMaxFromAmount?: string;
+    } | undefined;
     try {
-      const typedData = quote.evm?.orderTypedData;
+      if (quote.evm?.permitTypedData) {
+        permitSignature = await wallet.signTypedData(quote.evm.permitTypedData);
+      }
+      const typedData = quote.evm?.orderTypedDataRaw || quote.evm?.orderTypedData;
       if (!typedData) {
         throw new Error("No signable EIP-712 typed data returned in quote.");
       }
       signature = await wallet.signTypedData(typedData as unknown as Record<string, unknown>);
+      const bracketTyped = (quote.attachedBracket as { evm?: { orderTypedData?: string } } | null)?.evm?.orderTypedData;
+      if (bracketTyped) {
+        bracketSignature = await wallet.signTypedData(bracketTyped);
+        bracketMeta = quote.attachedBracket as {
+          salt?: string;
+          deadline?: string;
+          signedMaxFromAmount?: string;
+        };
+      }
     } catch (err: unknown) {
       setIsSigning(false);
       setSigningError(err instanceof Error ? err.message : "User rejected signature");
@@ -354,8 +453,24 @@ function TradeContent() {
         funderAddress: activeAddress,
         quoteId: quote.quoteId,
         userSignature: signature,
-        evmOrderTypedData: quote.evm?.orderTypedData as unknown as string | Record<string, unknown> | undefined,
-        limitNotionalPrice: form.orderType === "limit" ? form.limitPrice : undefined,
+        evmOrderTypedData: (quote.evm?.orderTypedDataRaw || quote.evm?.orderTypedData) as
+          | string
+          | Record<string, unknown>
+          | undefined,
+        evmPermitTypedData: quote.evm?.permitTypedData || undefined,
+        evmPermitSignature: permitSignature,
+        signalId: searchParams.get("signalId"),
+        attachedBracket:
+          bracketSignature && bracketMeta?.deadline && bracketMeta.signedMaxFromAmount
+            ? {
+                takeProfit: { notionalPrice: form.takeProfitPrice },
+                stopLoss: { notionalPrice: form.stopPrice },
+                userSignature: bracketSignature,
+                salt: bracketMeta.salt,
+                deadline: bracketMeta.deadline,
+                signedMaxFromAmount: bracketMeta.signedMaxFromAmount,
+              }
+            : undefined,
       });
 
       setOrder(submitRes.data.order);
@@ -377,6 +492,18 @@ function TradeContent() {
   };
 
   // Poll order status
+  const handleCancel = async () => {
+    if (!order?.providerOrderId) return;
+    const cancelMessage = `Definitive Flash v1 — Cancel Order\nOrder: ${order.providerOrderId}`;
+    try {
+      const userSignature = await wallet.signMessage(cancelMessage);
+      const res = await api.cancelOrder(order.id, { cancelMessage, userSignature });
+      setOrder(res.data.order);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Cancellation failed");
+    }
+  };
+
   const handleRefreshStatus = async () => {
     if (!order) return;
     setIsPolling(true);
@@ -563,30 +690,33 @@ function TradeContent() {
               <label className="text-[10px] uppercase text-[#78716C] font-bold">
                 Order Type
               </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setForm((s) => ({ ...s, orderType: "limit" }))}
-                  className={`py-1.5 rounded-sm border text-xs font-bold transition ${
-                    form.orderType === "limit"
-                      ? "bg-[#171717] text-white border-[#171717]"
-                      : "bg-[#FFF2DB]/40 text-[#78716C] border-[#E8DFD1]"
-                  }`}
-                >
-                  LIMIT (Flash)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm((s) => ({ ...s, orderType: "market" }))}
-                  className={`py-1.5 rounded-sm border text-xs font-bold transition ${
-                    form.orderType === "market"
-                      ? "bg-[#171717] text-white border-[#171717]"
-                      : "bg-[#FFF2DB]/40 text-[#78716C] border-[#E8DFD1]"
-                  }`}
-                >
-                  MARKET
-                </button>
-              </div>
+              <select
+                value={form.orderType}
+                onChange={(event) =>
+                  setForm((s) => ({
+                    ...s,
+                    orderType: event.target.value as FlashOrderChoice,
+                    side:
+                      event.target.value === "stop-loss" ||
+                      event.target.value === "take-profit" ||
+                      event.target.value === "bracket"
+                        ? "sell"
+                        : s.side,
+                  }))
+                }
+                className="w-full rounded-sm border border-[#E8DFD1] bg-white px-2 py-2 text-xs"
+              >
+                <option value="market">Market</option>
+                <option value="limit">Limit</option>
+                <option value="stop">Stop</option>
+                <option value="stop-loss">Stop loss</option>
+                <option value="take-profit">Take profit</option>
+                <option value="bracket">Bracket</option>
+                <option value="twap">TWAP</option>
+              </select>
+              <p className="text-[10px] text-[#78716C] font-sans">
+                DCA is not a separate Flash order type. A triggered market exit can fill at a worse price than the trigger.
+              </p>
             </div>
           </div>
 
@@ -638,8 +768,11 @@ function TradeContent() {
                 value={form.qty}
                 onChange={(e) => setForm((s) => ({ ...s, qty: e.target.value }))}
                 className="w-full px-2.5 py-1.5 rounded-sm border border-[#E8DFD1] bg-white text-xs font-bold text-[#171717] focus:outline-none focus:border-[#171717]"
-                placeholder="100"
+                placeholder="Your size, not the trader's"
               />
+              {handoffDraft && (
+                <p className="text-[10px] text-[#78716C]">Your amount. The post does not set position size.</p>
+              )}
             </div>
 
             {form.orderType === "limit" ? (
@@ -672,6 +805,47 @@ function TradeContent() {
               </div>
             )}
           </div>
+
+          {(form.orderType === "stop" || form.orderType === "stop-loss" || form.orderType === "bracket" || form.attachProtection) && (
+            <label className="block space-y-1 text-[10px] uppercase text-[#78716C] font-bold">
+              Stop {handoffDraft?.stopLoss ? "(from post, editable)" : ""}
+              <input
+                value={form.stopPrice}
+                onChange={(event) => setForm((s) => ({ ...s, stopPrice: event.target.value }))}
+                className="w-full px-2.5 py-1.5 rounded-sm border border-[#E8DFD1] bg-white text-xs"
+              />
+            </label>
+          )}
+          {(form.orderType === "take-profit" || form.orderType === "bracket" || form.attachProtection) && (
+            <label className="block space-y-1 text-[10px] uppercase text-[#78716C] font-bold">
+              Take profit {handoffDraft?.takeProfit ? "(from post, editable)" : ""}
+              <input
+                value={form.takeProfitPrice}
+                onChange={(event) => setForm((s) => ({ ...s, takeProfitPrice: event.target.value }))}
+                className="w-full px-2.5 py-1.5 rounded-sm border border-[#E8DFD1] bg-white text-xs"
+              />
+            </label>
+          )}
+          {form.orderType === "twap" && (
+            <label className="block space-y-1 text-[10px] uppercase text-[#78716C] font-bold">
+              TWAP minutes (minimum 5)
+              <input
+                value={form.twapMinutes}
+                onChange={(event) => setForm((s) => ({ ...s, twapMinutes: event.target.value }))}
+                className="w-full px-2.5 py-1.5 rounded-sm border border-[#E8DFD1] bg-white text-xs"
+              />
+            </label>
+          )}
+          {["market", "limit", "twap"].includes(form.orderType) && (
+            <label className="flex items-center gap-2 text-[11px] text-[#171717]">
+              <input
+                type="checkbox"
+                checked={form.attachProtection}
+                onChange={(event) => setForm((s) => ({ ...s, attachProtection: event.target.checked }))}
+              />
+              Attach stop-loss and take-profit to the asset this order receives
+            </label>
+          )}
 
           {/* Funding Balance / Chain Guidance */}
           <div className="text-[11px] text-[#78716C] bg-[#FFF2DB]/40 border border-[#E8DFD1] p-2.5 rounded-sm space-y-1">
@@ -787,7 +961,7 @@ function TradeContent() {
                     Expected Output
                   </div>
                   <div className="font-bold text-[#16A34A] mt-0.5">
-                    {quote.expectedOutputAmount || "~"} {form.side === "buy" ? selectedTargetAsset?.symbol : selectedContraAsset?.symbol}
+                    {quote.to?.amount || quote.expectedOutputAmount || "Unavailable"} {form.side === "buy" ? selectedTargetAsset?.symbol : selectedContraAsset?.symbol}
                   </div>
                 </div>
 
@@ -805,9 +979,15 @@ function TradeContent() {
                     Estimated Fee
                   </div>
                   <div className="font-bold text-[#171717] mt-0.5">
-                    ${quote.fees?.estimatedFeeNotional || "0.00"}
+                    {quote.fees?.estimatedFeeNotional ? `$${quote.fees.estimatedFeeNotional}` : "Unavailable"}
                   </div>
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[10px] text-[#78716C]">
+                <div>Price impact: {quote.estimatedPriceImpact ?? quote.priceImpactPercentage ?? "Unavailable"}</div>
+                <div>Recommended slippage: {quote.recommendedSlippage ?? "Unavailable"}</div>
+                <div>Expires: {quote.validUntil ? new Date(quote.validUntil).toLocaleString() : "Not returned"}</div>
+                <div>Setup txs: {quote.setupTxs?.length ?? (quote.evm?.approveTx ? 1 : 0)}</div>
               </div>
 
               {/* Step 2A: Wrap Native Asset Notice (if needed) */}
@@ -999,6 +1179,11 @@ function TradeContent() {
                   <ShieldCheck className="w-4 h-4 text-[#16A34A]" />
                   3. SUBMITTED ORDER &amp; ON-CHAIN EVIDENCE
                 </div>
+                {["PENDING", "SUBMITTED", "PARTIALLY_FILLED"].includes(order.status) && (
+                  <button type="button" onClick={() => void handleCancel()} className="text-[10px] font-bold text-[#F62440]">
+                    CANCEL
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleRefreshStatus}

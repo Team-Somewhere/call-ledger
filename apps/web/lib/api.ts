@@ -304,6 +304,48 @@ export const api = {
 
   getOrders: () => apiFetch<Order[]>("/orders"),
 
+  getPortfolio: () =>
+    apiFetch<{
+      orders: Order[];
+      positions: Array<{
+        id: string;
+        assetAddress: string;
+        chainId: string;
+        quantity: string;
+        averageEntryPrice: string;
+        unrealizedPnl: string | null;
+        realizedPnl: string | null;
+        investedAmount: string | null;
+        remainingQuantity: string | null;
+        status: string;
+        quoteAsset: string | null;
+      }>;
+      fills: Array<{
+        id: string;
+        transactionHash: string | null;
+        inputAmount: string | null;
+        outputAmount: string | null;
+        executionPrice: string | null;
+        fillTimestamp: string | null;
+        status: string | null;
+      }>;
+      performance: {
+        investedCapital: number;
+        realizedPnl: number;
+        unrealizedPnl: number;
+        totalPnl: number;
+        completedTrades: number;
+        closedPositions: number;
+        winRate: number | null;
+      };
+    }>("/orders/portfolio"),
+
+  cancelOrder: (orderId: string, body: { cancelMessage: string; userSignature: string }) =>
+    apiFetch<{ order: Order }>(`/orders/${orderId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   getWalletBalances: async (address: string): Promise<WalletBalancesResponse> => {
     const res = await fetch(`/api/wallet/balances?address=${encodeURIComponent(address)}`);
     if (!res.ok) {

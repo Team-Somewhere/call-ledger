@@ -51,7 +51,10 @@ const envSchema = z.object({
   ARKIV_RPC_URL: z.string().optional(),
 
   // --- Definitive Flash integration ---
+  // The deployed environment stores the key as DEFINITIVE_FLASH_API_KEY.
+  // DEFINITIVE_API_KEY remains accepted so older local files keep working.
   DEFINITIVE_API_KEY: z.string().optional(),
+  DEFINITIVE_FLASH_API_KEY: z.string().optional(),
   DEFINITIVE_BASE_URL: z.string().optional(),
   DEFINITIVE_INTEGRATOR_FEE_BPS: z.string().optional(),
 
@@ -80,6 +83,8 @@ if (!parsed.success) {
 
 export const env = {
   ...parsed.data,
+  DEFINITIVE_API_KEY:
+    parsed.data.DEFINITIVE_API_KEY || parsed.data.DEFINITIVE_FLASH_API_KEY,
   PORT: parsed.data.PORT || parsed.data.API_PORT || 8000,
   FIRECRAWL_MAX_PAGES_PER_RUN: parsed.data.FIRECRAWL_MAX_PAGES_PER_RUN ?? 5,
   FIRECRAWL_MAX_RESPONSE_BYTES: parsed.data.FIRECRAWL_MAX_RESPONSE_BYTES,

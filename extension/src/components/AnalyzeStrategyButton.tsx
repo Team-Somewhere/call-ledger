@@ -96,6 +96,7 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
   const [quote, setQuote] = useState<Record<string, unknown> | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [quoteRequest, setQuoteRequest] = useState<BuiltQuoteRequest | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const runQuote = async () => {
     setError(null);
@@ -143,6 +144,7 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
         setError(built.message);
         return;
       }
+      setNotice(built.note ?? null);
 
       const quoteRes = await sendMessage<Record<string, unknown>>({
         type: "REQUEST_QUOTE",
@@ -186,7 +188,11 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
         return;
       }
 
-      const signature = await signTypedDataV4(session.data.address, typed as string | Record<string, unknown>);
+      const signature = await signTypedDataV4(
+        session.data.address,
+        typed as string | Record<string, unknown>,
+        quoteRequest.targetChain || "base",
+      );
       setPhase("submitting");
 
       const submitRes = await sendMessage<{
@@ -304,16 +310,26 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
             </div>
           )}
 
+          {notice && <div className="cl-muted cl-small">{notice}</div>}
           {error && <div className="cl-follow__error">{error}</div>}
 
           <div className="cl-trade__actions">
-            {(phase === "idle" || phase === "error" || phase === "done") && (
+            {(phase === "idle" || (phase === "error" && !quote) || phase === "done") && (
               <button
                 type="button"
                 className="cl-btn cl-btn--active"
                 onClick={() => void runQuote()}
               >
                 {phase === "done" ? "Get new quote" : "Get quote"}
+              </button>
+            )}
+            {phase === "error" && quote && (
+              <button
+                type="button"
+                className="cl-btn cl-btn--active"
+                onClick={() => void confirmTrade()}
+              >
+                Confirm & sign in MetaMask
               </button>
             )}
             {phase === "quoting" && (
@@ -333,7 +349,7 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
             {(phase === "signing" || phase === "submitting") && (
               <button type="button" className="cl-btn" disabled>
                 <Loader2 size={12} className="cl-spin" />
-                {phase === "signing" ? "Awaiting signature…" : "Submitting…"}
+                {phase === "signing" ? "Switching to Base, then signing…" : "Submitting…"}
               </button>
             )}
           </div>
