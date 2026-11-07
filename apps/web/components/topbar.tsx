@@ -24,6 +24,7 @@ const navLinks = [
   { href: "/", label: "TERMINAL" },
   { href: "/discover", label: "DISCOVER" },
   { href: "/following", label: "FOLLOWING" },
+  { href: "/trade", label: "TRADE" },
   { href: "/strategies", label: "ALLOCATIONS" },
   { href: "/portfolio", label: "PORTFOLIO" },
 ];
