@@ -344,6 +344,9 @@ export function Topbar() {
   const [showWalletMenu, setShowWalletMenu] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Hide the app topbar on the marketing landing page (which has its own nav)
+  if (pathname === "/landing") return null;
+
   const {
     address,
     isAuthenticated,
