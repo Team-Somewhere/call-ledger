@@ -42,3 +42,4 @@ export const RotatingWords: React.FC<RotatingWordsProps> = ({
 };
 
 export default RotatingWords;
+

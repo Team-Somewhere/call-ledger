@@ -52,3 +52,4 @@ export const LandingNavbar: React.FC = () => {
 };
 
 export default LandingNavbar;
+

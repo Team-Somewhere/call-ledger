@@ -104,3 +104,4 @@ export const MinimalFooter: React.FC = () => {
 };
 
 export default MinimalFooter;
+

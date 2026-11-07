@@ -117,3 +117,4 @@ export const TextScramble: React.FC<TextScrambleProps> = ({
 };
 
 export default TextScramble;
+

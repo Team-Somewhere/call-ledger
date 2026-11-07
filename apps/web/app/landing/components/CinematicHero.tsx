@@ -194,3 +194,4 @@ export const CinematicHero: React.FC<CinematicHeroProps> = () => {
 };
 
 export default CinematicHero;
+

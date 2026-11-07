@@ -11,7 +11,7 @@ import { MinimalFooter } from "./components/MinimalFooter";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#FFFAF3] text-[#171717] relative selection:bg-[#FFE5BF] selection:text-[#171717] overflow-x-hidden">
+    <div className="min-h-screen bg-[#FFFAF3] text-[#171717] relative selection:bg-[#FFE5BF] selection:text-[#171717]">
       {/* Blueprint Dot Grid */}
       <div className="fixed inset-0 ledger-dot-grid pointer-events-none z-0 opacity-35" aria-hidden="true" />
 
