@@ -180,8 +180,12 @@ export async function archivePostAlways(
       confirmedAt,
       expiresAt: archiveResult.expiresAt,
     });
-  } catch {
-    // non-fatal — on-chain write already succeeded
+  } catch (err) {
+    // On-chain write already succeeded — log so topbar history can be repaired.
+    console.error(
+      `[ARKIV] Failed to persist tx receipt ${archiveResult.txHash} for post ${post.sourcePostId}:`,
+      err,
+    );
   }
 
   return {

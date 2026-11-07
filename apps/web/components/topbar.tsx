@@ -30,10 +30,19 @@ const navLinks = [
 
 // ─── Latest Arkiv TX widget ───────────────────────────────────────────────
 
+function shortHash(value: string | null | undefined, size = 10): string {
+  if (!value) return "—";
+  if (value.length <= size + 1) return value;
+  return `${value.slice(0, size)}…`;
+}
+
 function ArkivTxWidget() {
   const [open, setOpen] = useState(false);
-  const [latest, setLatest] = useState<ArkivTransaction | null | undefined>(undefined);
+  const [latest, setLatest] = useState<ArkivTransaction | null | undefined>(
+    undefined,
+  );
   const [recent, setRecent] = useState<ArkivTransaction[]>([]);
+  const [total, setTotal] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -41,15 +50,26 @@ function ArkivTxWidget() {
   const load = useCallback(async () => {
     const [latestResult, recentResult] = await Promise.allSettled([
       api.arkivLatestTransaction(),
-      api.arkivTransactions("?limit=5"),
+      api.arkivTransactions("?limit=20"),
     ]);
 
     const latestTx =
       latestResult.status === "fulfilled" ? latestResult.value.data : null;
-    const recentTxs =
-      recentResult.status === "fulfilled" ? recentResult.value.data : [];
+    const recentPayload =
+      recentResult.status === "fulfilled" ? recentResult.value : null;
+    const recentTxs = recentPayload?.data ?? [];
+    const meta = recentPayload?.meta as
+      | { total?: number; onChainCount?: number }
+      | undefined;
+
     setLatest(latestTx ?? recentTxs[0] ?? null);
     setRecent(recentTxs);
+    setTotal(
+      typeof meta?.total === "number"
+        ? meta.total
+        : recentTxs.length,
+    );
+
     const loadFailure =
       latestResult.status === "rejected"
         ? latestResult.reason
@@ -65,14 +85,12 @@ function ArkivTxWidget() {
     );
   }, []);
 
-  // Load on mount and poll every 30s
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), 30_000);
+    const t = setInterval(() => void load(), 15_000);
     return () => clearInterval(t);
   }, [load]);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -84,13 +102,14 @@ function ArkivTxWidget() {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  function copyHash(hash: string) {
-    void navigator.clipboard.writeText(hash);
-    setCopied(hash);
+  function copyValue(value: string) {
+    void navigator.clipboard.writeText(value);
+    setCopied(value);
     setTimeout(() => setCopied(null), 2000);
   }
 
   const hasLatest = latest !== null && latest !== undefined;
+  const preview = latest?.txHash ?? latest?.entityKey ?? null;
 
   return (
     <div ref={ref} className="relative">
@@ -102,36 +121,48 @@ function ArkivTxWidget() {
             ? "border-[#16A34A]/40 bg-[#16A34A]/8 text-[#16A34A] hover:border-[#16A34A]"
             : "border-[#E8DFD1] bg-[#FFFAF3] text-[#78716C] hover:border-[#171717] hover:text-[#171717]",
         )}
-        title="Latest Arkiv transaction"
+        title="Latest Arkiv transaction hashes saved by CallLedger"
       >
         {latest === undefined ? (
           <Loader2 className="w-3 h-3 animate-spin" />
         ) : (
-          <Shield className={cn("w-3 h-3", hasLatest ? "text-[#16A34A]" : "text-[#78716C]")} />
+          <Shield
+            className={cn(
+              "w-3 h-3",
+              hasLatest ? "text-[#16A34A]" : "text-[#78716C]",
+            )}
+          />
         )}
-        <span className="uppercase tracking-wider hidden sm:inline">LATEST ARKIV TX</span>
-        {hasLatest && (
+        <span className="uppercase tracking-wider hidden sm:inline">
+          LATEST ARKIV TX
+        </span>
+        {hasLatest && preview && (
           <span className="font-mono text-[9px] text-[#16A34A] hidden lg:inline">
-            {latest.txHash.slice(0, 8)}…
+            {shortHash(preview, 8)}
+          </span>
+        )}
+        {total > 0 && (
+          <span className="text-[9px] text-[#78716C] hidden md:inline">
+            · {total}
           </span>
         )}
         <ChevronDown className="w-3 h-3" />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1.5 w-96 rounded-sm border border-[#E8DFD1] bg-[#FFFAF3] shadow-xl z-50 font-mono text-xs overflow-hidden">
-          {/* Header */}
+        <div className="absolute right-0 mt-1.5 w-[28rem] max-w-[calc(100vw-2rem)] rounded-sm border border-[#E8DFD1] bg-[#FFFAF3] shadow-xl z-50 font-mono text-xs overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 border-b border-[#E8DFD1] bg-[#FFF2DB]/40">
             <div className="flex items-center gap-1.5">
               <Shield className="w-3 h-3 text-[#16A34A]" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#171717]">
-                Arkiv Transaction History
+                Platform → Arkiv writes
               </span>
             </div>
-            <span className="text-[9px] text-[#78716C]">RABDI TESTNET</span>
+            <span className="text-[9px] text-[#78716C]">
+              RABDI · {total} saved
+            </span>
           </div>
 
-          {/* Latest tx */}
           {loadError && !hasLatest ? (
             <div className="px-3 py-6 text-center">
               <AlertCircle className="w-5 h-5 text-[#F62440] mx-auto mb-2" />
@@ -145,43 +176,38 @@ function ArkivTxWidget() {
           ) : !hasLatest ? (
             <div className="px-3 py-6 text-center">
               <Zap className="w-5 h-5 text-[#E8DFD1] mx-auto mb-2" />
-              <div className="text-[11px] font-bold text-[#171717]">No transactions yet</div>
+              <div className="text-[11px] font-bold text-[#171717]">
+                No Arkiv writes yet
+              </div>
               <p className="text-[10px] text-[#78716C] mt-1 font-sans">
-                Add a trader and enable monitoring to start archiving to Arkiv.
+                Open a trader and click Fetch Latest Posts — each archive write
+                appears here with its tx hash / entity key.
               </p>
             </div>
           ) : (
             <>
-              {/* Latest */}
               <div className="px-3 py-2.5 bg-[#16A34A]/5 border-b border-[#E8DFD1]">
-                <div className="text-[9px] uppercase text-[#78716C] mb-1.5 tracking-wider">Latest confirmed</div>
-                <TxRow
-                  tx={latest}
-                  copied={copied}
-                  onCopy={copyHash}
-                  highlight
-                />
+                <div className="text-[9px] uppercase text-[#78716C] mb-1.5 tracking-wider">
+                  Latest confirmed write
+                </div>
+                <TxRow tx={latest} copied={copied} onCopy={copyValue} />
               </div>
 
-              {/* Recent list */}
-              {recent.length > 0 && (
-                <div>
-                  <div className="px-3 pt-2 pb-1 text-[9px] uppercase text-[#78716C] tracking-wider">
-                    Recent transactions
-                  </div>
-                  <div className="divide-y divide-[#E8DFD1]/60">
-                    {recent.slice(0, 5).map((tx) => (
-                      <div key={tx.id} className="px-3 py-2">
-                        <TxRow tx={tx} copied={copied} onCopy={copyHash} />
-                      </div>
-                    ))}
-                  </div>
+              <div className="max-h-80 overflow-y-auto">
+                <div className="px-3 pt-2 pb-1 text-[9px] uppercase text-[#78716C] tracking-wider sticky top-0 bg-[#FFFAF3]">
+                  Latest hashes ({recent.length})
                 </div>
-              )}
+                <div className="divide-y divide-[#E8DFD1]/60">
+                  {recent.map((tx) => (
+                    <div key={tx.id} className="px-3 py-2">
+                      <TxRow tx={tx} copied={copied} onCopy={copyValue} />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
-          {/* Footer */}
           <div className="border-t border-[#E8DFD1] px-3 py-2 flex items-center justify-between">
             <Link
               href="/archive"
@@ -190,13 +216,13 @@ function ArkivTxWidget() {
             >
               View archive feed →
             </Link>
-            <Link
-              href="/monitoring"
-              onClick={() => setOpen(false)}
+            <button
+              type="button"
+              onClick={() => void load()}
               className="text-[10px] text-[#78716C] hover:text-[#171717] transition"
             >
-              Worker status →
-            </Link>
+              Refresh
+            </button>
           </div>
         </div>
       )}
@@ -208,67 +234,102 @@ function TxRow({
   tx,
   copied,
   onCopy,
-  highlight = false,
 }: {
   tx: ArkivTransaction;
   copied: string | null;
-  onCopy: (hash: string) => void;
-  highlight?: boolean;
+  onCopy: (value: string) => void;
 }) {
   const confirmedAt = tx.confirmedAt ? new Date(tx.confirmedAt) : null;
+  const primary = tx.txHash ?? tx.entityKey;
+  const proofLabel =
+    tx.proofSource === "arkiv_chain"
+      ? "ON-CHAIN"
+      : tx.txHash
+        ? "TX"
+        : "ENTITY";
 
   return (
-    <div className={cn("space-y-1", highlight && "")}>
-      {/* Hash row */}
-      <div className="flex items-center gap-1.5">
+    <div className="space-y-1.5">
+      <div className="flex items-start gap-1.5">
         <span
           className={cn(
-            "text-[9px] font-bold uppercase px-1 py-px rounded-sm",
+            "text-[9px] font-bold uppercase px-1 py-px rounded-sm shrink-0 mt-0.5",
             tx.status === "CONFIRMED"
               ? "bg-[#16A34A]/10 text-[#16A34A]"
               : "bg-[#F62440]/10 text-[#F62440]",
           )}
         >
-          {tx.status}
+          {proofLabel}
         </span>
-        <code className="text-[10px] font-mono text-[#171717] flex-1 break-all">
-          {tx.txHash}
-        </code>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => onCopy(tx.txHash)}
-            title="Copy transaction hash"
-            className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition"
-          >
-            {copied === tx.txHash ? (
-              <Check className="w-3 h-3 text-[#16A34A]" />
-            ) : (
-              <Copy className="w-3 h-3" />
-            )}
-          </button>
-          <a
-            href={tx.explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="View on Rabdi explorer"
-            className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition"
-          >
-            <ExternalLink className="w-3 h-3" />
-          </a>
+        <div className="min-w-0 flex-1 space-y-1">
+          {tx.txHash && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] text-[#78716C] shrink-0">hash</span>
+              <code className="text-[10px] font-mono text-[#171717] flex-1 break-all">
+                {tx.txHash}
+              </code>
+              <button
+                onClick={() => onCopy(tx.txHash!)}
+                title="Copy transaction hash"
+                className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition shrink-0"
+              >
+                {copied === tx.txHash ? (
+                  <Check className="w-3 h-3 text-[#16A34A]" />
+                ) : (
+                  <Copy className="w-3 h-3" />
+                )}
+              </button>
+              {tx.explorerUrl && (
+                <a
+                  href={tx.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="View on Rabdi explorer"
+                  className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition shrink-0"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] text-[#78716C] shrink-0">entity</span>
+            <code className="text-[10px] font-mono text-[#292524] flex-1 break-all">
+              {tx.entityKey}
+            </code>
+            <button
+              onClick={() => onCopy(tx.entityKey)}
+              title="Copy Arkiv entity key"
+              className="p-0.5 rounded hover:bg-[#E8DFD1]/60 text-[#78716C] hover:text-[#171717] transition shrink-0"
+            >
+              {copied === tx.entityKey ? (
+                <Check className="w-3 h-3 text-[#16A34A]" />
+              ) : (
+                <Copy className="w-3 h-3" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
-      {/* Meta row */}
-      <div className="flex items-center gap-3 text-[9px] text-[#78716C]">
-        {tx.traderUsername && (
-          <span>@{tx.traderUsername}</span>
+      <div className="flex items-center gap-3 text-[9px] text-[#78716C] pl-8">
+        {tx.traderUsername && <span>@{tx.traderUsername}</span>}
+        {tx.sourcePostId && (
+          <span className="font-mono truncate max-w-[140px]">
+            post·{shortHash(tx.sourcePostId, 10)}
+          </span>
         )}
-        <span className="font-mono truncate max-w-[120px]">
-          post·{tx.sourcePostId.slice(-8)}
-        </span>
         {confirmedAt && (
           <span className="ml-auto">
-            {confirmedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {confirmedAt.toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </span>
+        )}
+        {!tx.txHash && primary && (
+          <span className="text-[#78716C]">stored on Arkiv</span>
         )}
       </div>
     </div>

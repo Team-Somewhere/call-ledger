@@ -29,6 +29,7 @@ export interface FirecrawlScrapeResult {
   url: string;
   title: string | null;
   description: string | null;
+  imageUrl: string | null;
   markdown: string | null;
   statusCode: number | null;
   publishedAt: string | null;
@@ -180,6 +181,10 @@ export class FirecrawlClient {
           metadata?: {
             title?: string;
             description?: string;
+            ogImage?: string | string[];
+            "og:image"?: string | string[];
+            twitterImage?: string | string[];
+            "twitter:image"?: string | string[];
             sourceURL?: string;
             statusCode?: number;
             publishedTime?: string;
@@ -203,6 +208,7 @@ export class FirecrawlClient {
           url.toString(),
         title: payload.data.metadata?.title?.trim() || null,
         description: payload.data.metadata?.description?.trim() || null,
+        imageUrl: firstImageUrl(payload.data.metadata),
         markdown: payload.data.markdown ?? null,
         statusCode: payload.data.metadata?.statusCode ?? null,
         publishedAt: payload.data.metadata?.publishedTime ?? null,
@@ -212,10 +218,7 @@ export class FirecrawlClient {
     }
   }
 
-  async search(
-    query: string,
-    limit = 10,
-  ): Promise<FirecrawlSearchResult[]> {
+  async search(query: string, limit = 10): Promise<FirecrawlSearchResult[]> {
     this.assertAvailable();
 
     const controller = new AbortController();
@@ -283,6 +286,29 @@ export class FirecrawlClient {
       clearTimeout(timer);
     }
   }
+}
+
+function firstImageUrl(
+  metadata:
+    | {
+        ogImage?: string | string[];
+        "og:image"?: string | string[];
+        twitterImage?: string | string[];
+        "twitter:image"?: string | string[];
+      }
+    | undefined,
+): string | null {
+  const imageFields = [
+    metadata?.ogImage,
+    metadata?.["og:image"],
+    metadata?.twitterImage,
+    metadata?.["twitter:image"],
+  ];
+  for (const image of imageFields) {
+    const url = Array.isArray(image) ? image[0] : image;
+    if (typeof url === "string" && url.trim()) return url.trim();
+  }
+  return null;
 }
 
 function parseRetryAfter(value: string | null): number | null {

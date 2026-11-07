@@ -470,7 +470,8 @@ export interface ArchivedPost {
 export interface ArkivTransaction {
   id: string;
   entityKey: string;
-  txHash: string;
+  /** On-chain write hash when known; null for entity-only proofs. */
+  txHash: string | null;
   sourcePostId: string;
   traderId: string | null;
   traderUsername: string | null;
@@ -480,7 +481,8 @@ export interface ArkivTransaction {
   confirmedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
-  explorerUrl: string;
+  explorerUrl: string | null;
+  proofSource?: "local_tx" | "local_record" | "arkiv_chain";
 }
 
 // Phase 3: Worker status

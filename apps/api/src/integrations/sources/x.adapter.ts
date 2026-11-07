@@ -10,7 +10,10 @@ import {
   type ValidatedCreatorSource,
 } from "@call-ledger/shared";
 import { SourceAdapterError } from "@call-ledger/shared";
-import type { FirecrawlClient } from "../firecrawl/firecrawl.client";
+import type {
+  FirecrawlClient,
+  FirecrawlScrapeResult,
+} from "../firecrawl/firecrawl.client";
 
 /** Twitter/X snowflake epoch (ms). */
 const X_SNOWFLAKE_EPOCH_MS = 1288834974657n;
@@ -47,7 +50,8 @@ export class XAdapter implements CreatorSourceAdapter {
       );
     }
 
-    const isAvailable = this.ingestionEnabled || Boolean(this.firecrawl?.enabled);
+    const isAvailable =
+      this.ingestionEnabled || Boolean(this.firecrawl?.enabled);
 
     let displayName: string = `@${username}`;
     let description: string | null = null;
@@ -73,14 +77,9 @@ export class XAdapter implements CreatorSourceAdapter {
           description = scrape.description.trim() || null;
         }
 
-        if (scrape.markdown) {
-          const imgMatch = scrape.markdown.match(
-            /!\[([^\]]*)\]\((https:\/\/pbs\.twimg\.com\/profile_images\/[^)]+)\)/,
-          );
-          if (imgMatch?.[2]) {
-            avatarUrl = imgMatch[2];
-          }
+        avatarUrl = extractXProfileAvatar(scrape);
 
+        if (scrape.markdown) {
           const nameMatch = scrape.markdown.match(
             /^#\s+(.+?)(?:\s+\(@[A-Za-z0-9_]+\))?$/m,
           );
@@ -153,9 +152,12 @@ export class XAdapter implements CreatorSourceAdapter {
 
         // Prefer the live profile page — it surfaces the newest posts.
         try {
-          const scrape = await this.firecrawl.scrape(`https://x.com/${handle}`, {
-            allowSocial: true,
-          });
+          const scrape = await this.firecrawl.scrape(
+            `https://x.com/${handle}`,
+            {
+              allowSocial: true,
+            },
+          );
           for (const candidate of extractPostsFromProfileMarkdown(
             scrape.markdown,
             handle,
@@ -262,7 +264,8 @@ function toNormalizedPost(
   candidate: RawXPostCandidate,
   handle: string,
 ): NormalizedPost {
-  const content = candidate.text || candidate.title || "Trading update from creator";
+  const content =
+    candidate.text || candidate.title || "Trading update from creator";
   const contentHash = createHash("sha256").update(content).digest("hex");
   const publishedAt =
     snowflakeToDate(candidate.statusId) ??
@@ -362,6 +365,33 @@ export function extractPostsFromProfileMarkdown(
   }
 
   return results;
+}
+
+export function extractXProfileAvatar(
+  scrape: Pick<FirecrawlScrapeResult, "imageUrl" | "markdown">,
+): string | null {
+  const markdownImages = [
+    ...(scrape.markdown?.matchAll(
+      /!\[[^\]]*\]\((https:\/\/pbs\.twimg\.com\/profile_images\/[^)\s]+)(?:\s+["'][^)]*["'])?\)/g,
+    ) ?? []),
+  ].map((match) => match[1]);
+
+  for (const candidate of [scrape.imageUrl, ...markdownImages]) {
+    if (!candidate) continue;
+    try {
+      const url = new URL(candidate);
+      if (
+        url.protocol === "https:" &&
+        url.hostname === "pbs.twimg.com" &&
+        url.pathname.startsWith("/profile_images/")
+      ) {
+        return url.toString();
+      }
+    } catch {
+      // Ignore malformed image metadata and try the next candidate.
+    }
+  }
+  return null;
 }
 
 export function normalizeXUsername(raw: string): string {

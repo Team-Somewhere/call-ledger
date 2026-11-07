@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { describe, it } from "node:test";
 import { X_UNAVAILABLE_MESSAGE } from "@call-ledger/shared";
 import {
+  extractXProfileAvatar,
   XAdapter,
   isValidXUsername,
   normalizeXUsername,
@@ -427,6 +428,30 @@ describe("Firecrawl / website adapter", () => {
     assert.throws(() => client.assertAvailable(), /not enabled/);
   });
 
+  it("extracts a profile image from Firecrawl metadata", async () => {
+    const profileImage =
+      "https://pbs.twimg.com/profile_images/123/avatar_normal.jpg";
+    const client = new FirecrawlClient({
+      enabled: true,
+      apiKey: "test-key",
+      maxPagesPerRun: 1,
+      fetchImpl: (async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              markdown: "",
+              metadata: { "og:image": profileImage },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )) as unknown as typeof fetch,
+    });
+
+    const result = await client.scrape("https://example.com");
+    assert.strictEqual(result.imageUrl, profileImage);
+  });
+
   it("rejects a website source without authorization confirmation", async () => {
     const client = new FirecrawlClient({
       enabled: true,
@@ -587,6 +612,32 @@ describe("Firecrawl / website adapter", () => {
 });
 
 describe("X adapter placeholder", () => {
+  it("extracts a valid X profile image from profile metadata or markdown", () => {
+    const profileImage =
+      "https://pbs.twimg.com/profile_images/123/avatar_normal.jpg";
+    assert.strictEqual(
+      extractXProfileAvatar({ imageUrl: profileImage, markdown: null }),
+      profileImage,
+    );
+    assert.strictEqual(
+      extractXProfileAvatar({
+        imageUrl: null,
+        markdown: `![Trader](${profileImage})`,
+      }),
+      profileImage,
+    );
+  });
+
+  it("ignores non-X and insecure profile image URLs", () => {
+    assert.strictEqual(
+      extractXProfileAvatar({
+        imageUrl: "https://attacker.example/avatar.jpg",
+        markdown: "![avatar](http://pbs.twimg.com/profile_images/avatar.jpg)",
+      }),
+      null,
+    );
+  });
+
   it("normalizes and validates X usernames", () => {
     assert.strictEqual(normalizeXUsername("@trader"), "trader");
     assert.strictEqual(normalizeXUsername("https://x.com/trader"), "trader");

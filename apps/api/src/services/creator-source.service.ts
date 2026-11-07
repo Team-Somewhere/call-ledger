@@ -17,10 +17,7 @@ import {
   type ValidatedCreatorSource,
 } from "@call-ledger/shared";
 import { sanitizePublicUrl } from "../utils/public-url";
-import {
-  archivePostAlways,
-  isApiArkivWriteReady,
-} from "./arkiv-write.service";
+import { archivePostAlways, isApiArkivWriteReady } from "./arkiv-write.service";
 
 /**
  * Creator / source management.
@@ -56,12 +53,12 @@ export function toAdapterInput(input: ResolveCreatorSourceInput): unknown {
 }
 
 /** Finds an existing source row matching a validated source identity. */
-export async function findSourceByIdentity(
-  validated: ValidatedCreatorSource,
-) {
+export async function findSourceByIdentity(validated: ValidatedCreatorSource) {
   const identityConditions = [];
   if (validated.externalId) {
-    identityConditions.push(eq(creatorSources.externalId, validated.externalId));
+    identityConditions.push(
+      eq(creatorSources.externalId, validated.externalId),
+    );
   }
   if (validated.handle) {
     identityConditions.push(
@@ -128,9 +125,7 @@ export async function ingestPostsForSource(
     etag: source.etag,
     lastModified: source.lastModified,
     crawlAuthorized: source.crawlAuthorized,
-    providerMeta: source.providerMeta
-      ? JSON.parse(source.providerMeta)
-      : null,
+    providerMeta: source.providerMeta ? JSON.parse(source.providerMeta) : null,
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
   };
@@ -245,7 +240,10 @@ export async function ingestPostsForSource(
             sourcePostId: post.sourcePostId,
             authorHandle: post.authorHandle ?? source.handle ?? "unknown",
             authorDisplayName:
-              source.displayName ?? post.authorHandle ?? source.handle ?? "unknown",
+              source.displayName ??
+              post.authorHandle ??
+              source.handle ??
+              "unknown",
             content: post.content,
             canonicalUrl: post.canonicalUrl,
             publishedAt: post.publishedAt,
@@ -318,6 +316,40 @@ export async function createCreatorWithSource(params: {
 
   const existingSource = await findSourceByIdentity(validated);
   if (existingSource) {
+    const refreshedAvatarUrl = validated.avatarUrl ?? existingSource.avatarUrl;
+    const refreshedDisplayName =
+      validated.displayName && !validated.displayName.startsWith("@")
+        ? validated.displayName
+        : existingSource.displayName;
+    const refreshedDescription =
+      validated.description ?? existingSource.description;
+    if (
+      refreshedAvatarUrl !== existingSource.avatarUrl ||
+      refreshedDisplayName !== existingSource.displayName ||
+      refreshedDescription !== existingSource.description
+    ) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(creatorSources)
+          .set({
+            avatarUrl: refreshedAvatarUrl,
+            displayName: refreshedDisplayName,
+            description: refreshedDescription,
+            updatedAt: new Date(),
+          })
+          .where(eq(creatorSources.id, existingSource.id));
+        await tx
+          .update(creators)
+          .set({
+            avatarUrl: refreshedAvatarUrl,
+            displayName: refreshedDisplayName ?? undefined,
+            description: refreshedDescription,
+            updatedAt: new Date(),
+          })
+          .where(eq(creators.id, existingSource.creatorId));
+      });
+    }
+
     // Duplicate source identity: return the existing creator instead of
     // creating a second row for the same creator.
     if (
@@ -357,7 +389,8 @@ export async function createCreatorWithSource(params: {
     const [creator] = await tx
       .insert(creators)
       .values({
-        displayName: validated.displayName?.trim() || validated.handle || "Creator",
+        displayName:
+          validated.displayName?.trim() || validated.handle || "Creator",
         description: validated.description,
         avatarUrl: validated.avatarUrl,
         // Legacy X columns are only populated for X sources.
@@ -743,9 +776,7 @@ export async function deleteSource(sourceId: string) {
   }
 
   await db.transaction(async (tx) => {
-    await tx
-      .delete(creatorSources)
-      .where(eq(creatorSources.id, sourceId));
+    await tx.delete(creatorSources).where(eq(creatorSources.id, sourceId));
 
     const [remaining] = await tx
       .select({ total: count() })

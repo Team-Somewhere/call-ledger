@@ -28,7 +28,10 @@ export async function listTxHistory(req: Request, res: Response): Promise<void> 
     return;
   }
   const result = await listTransactions(query.data);
-  sendSuccess(res, result.transactions, { total: result.total });
+  sendSuccess(res, result.transactions, {
+    total: result.total,
+    onChainCount: result.onChainCount,
+  });
 }
 
 export async function getLatestTx(req: Request, res: Response): Promise<void> {
