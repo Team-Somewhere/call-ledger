@@ -596,3 +596,65 @@ body.cl-overlay-active div[data-testid="HoverCard"] {
     transform: rotate(360deg);
   }
 }
+
+.cl-follow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.cl-follow__error,
+.cl-trade .cl-follow__error {
+  color: #f87171;
+  font-size: 11px;
+  max-width: 360px;
+}
+.cl-trade {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cl-trade__label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+.cl-trade__input {
+  font: inherit;
+  font-size: 13px;
+  color: #e5e7eb;
+  background: #15171c;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 6px 8px;
+  max-width: 160px;
+}
+.cl-trade__quote {
+  background: #15171c;
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cl-trade__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cl-trade__done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #34d399;
+  font-size: 12px;
+  font-weight: 600;
+}
+.cl-spin {
+  animation: clSpin 0.8s linear infinite;
+}

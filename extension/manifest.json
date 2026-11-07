@@ -2,12 +2,13 @@
   "manifest_version": 3,
   "name": "CallLedger for X",
   "short_name": "CallLedger",
-  "version": "0.1.0",
-  "description": "Analyze trading strategies in X posts and review token data, with CallLedger. Unofficial; not affiliated with X.",
+  "version": "0.2.0",
+  "description": "Follow traders and implement strategies on X with CallLedger — without leaving the feed. Unofficial; not affiliated with X.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "sidePanel"],
+  "permissions": ["storage", "sidePanel", "tabs"],
   "host_permissions": [
     "https://x.com/*",
+    "https://www.x.com/*",
     "https://api.dexscreener.com/*",
     "https://api.geckoterminal.com/*",
     "https://api.coingecko.com/*",
@@ -21,7 +22,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://x.com/*"],
+      "matches": ["https://x.com/*", "https://www.x.com/*"],
       "js": ["src/content/index.js"],
       "css": ["callledger-extension.css"],
       "run_at": "document_idle"
@@ -39,6 +40,12 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injected/ethereum-bridge.js"],
+      "matches": ["https://x.com/*", "https://www.x.com/*"]
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }

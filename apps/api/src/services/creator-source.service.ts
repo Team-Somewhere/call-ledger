@@ -580,6 +580,58 @@ export interface CreatorDetail {
   followersCount: number;
 }
 
+/**
+ * Lookup a creator by X handle (case-insensitive).
+ * Used by the browser extension profile Follow button.
+ */
+export async function findCreatorIdByXHandle(
+  handle: string,
+): Promise<{ creatorId: string; displayName: string | null; handle: string } | null> {
+  const normalized = handle.replace(/^@+/, "").toLowerCase();
+  if (!normalized) return null;
+
+  const [bySource] = await db
+    .select({
+      creatorId: creatorSources.creatorId,
+      handle: creatorSources.handle,
+      displayName: creators.displayName,
+    })
+    .from(creatorSources)
+    .innerJoin(creators, eq(creators.id, creatorSources.creatorId))
+    .where(
+      and(
+        eq(creatorSources.sourceType, "X"),
+        sql`lower(${creatorSources.handle}) = ${normalized}`,
+      ),
+    )
+    .limit(1);
+
+  if (bySource) {
+    return {
+      creatorId: bySource.creatorId,
+      displayName: bySource.displayName ?? null,
+      handle: bySource.handle ?? normalized,
+    };
+  }
+
+  const [byUsername] = await db
+    .select({
+      creatorId: creators.id,
+      displayName: creators.displayName,
+      handle: creators.xUsername,
+    })
+    .from(creators)
+    .where(sql`lower(${creators.xUsername}) = ${normalized}`)
+    .limit(1);
+
+  if (!byUsername) return null;
+  return {
+    creatorId: byUsername.creatorId,
+    displayName: byUsername.displayName ?? null,
+    handle: byUsername.handle ?? normalized,
+  };
+}
+
 export async function getCreatorDetail(
   creatorId: string,
 ): Promise<CreatorDetail | null> {

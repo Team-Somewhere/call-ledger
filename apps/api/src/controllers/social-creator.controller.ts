@@ -111,6 +111,43 @@ export async function getCreators(req: Request, res: Response): Promise<void> {
   sendSuccess(res, result.data, result.meta);
 }
 
+/** GET /api/creators/by-handle/:handle — extension profile lookup */
+export async function getCreatorByHandle(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const raw = String(req.params.handle ?? "");
+  const handle = raw.replace(/^@+/, "").trim();
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) {
+    sendError(res, "VALIDATION_ERROR", "Invalid X handle", 400);
+    return;
+  }
+
+  const found = await creatorSourceService.findCreatorIdByXHandle(handle);
+  if (!found) {
+    sendSuccess(res, {
+      creatorId: null,
+      handle: handle.toLowerCase(),
+      displayName: null,
+      isFollowing: false,
+      exists: false,
+    });
+    return;
+  }
+
+  const following = req.auth
+    ? await followService.isFollowing(req.auth.id, found.creatorId)
+    : false;
+
+  sendSuccess(res, {
+    creatorId: found.creatorId,
+    handle: found.handle.toLowerCase(),
+    displayName: found.displayName,
+    isFollowing: following,
+    exists: true,
+  });
+}
+
 /** GET /api/creators/:creatorId */
 export async function getCreatorById(
   req: Request,

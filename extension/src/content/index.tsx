@@ -5,6 +5,9 @@ import { detectTokenMentions, uniqueSymbols } from "./token-detector";
 import { CallLedgerPostBar } from "../components/PostBar";
 import { TokenOverlay, triggerTokenOverlay, hideTokenOverlay, dismissTokenOverlay, clearDismissedTokenOverlay } from "../components/TokenOverlay";
 import { PRODUCT_NAME } from "../config/constants";
+import { injectEthereumBridge } from "./ethereum-bridge-client";
+import { setupWalletConnectListener } from "./wallet-connect-listener";
+import { syncProfileFollowButton } from "./profile-follow";
 import "./styles.css";
 
 /**
@@ -137,13 +140,26 @@ function initTokenOverlay() {
 }
 
 function start() {
+  injectEthereumBridge();
+  setupWalletConnectListener();
   initTokenOverlay();
   setupCashtagInterceptors();
+  syncProfileFollowButton();
 
   const handle = observeX((rootNode) => {
     findPostArticles(rootNode).forEach(mountForPost);
     cleanupRemoved();
+    syncProfileFollowButton();
   });
+
+  // SPA navigations on X
+  let lastPath = location.pathname;
+  setInterval(() => {
+    if (location.pathname !== lastPath) {
+      lastPath = location.pathname;
+      syncProfileFollowButton();
+    }
+  }, 800);
 
   window.addEventListener("pagehide", () => handle.stop(), { once: true });
   console.info(`[${PRODUCT_NAME}] content script active`);

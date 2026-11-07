@@ -15,6 +15,7 @@ import { copyFileSync, mkdirSync, cpSync } from "node:fs";
 
 const contentEntry = resolve(__dirname, "src/content/index.tsx");
 const workerEntry = resolve(__dirname, "src/background/service-worker.ts");
+const bridgeEntry = resolve(__dirname, "src/injected/ethereum-bridge.ts");
 
 function copyStatic(): Plugin {
   return {
@@ -34,7 +35,7 @@ const defineEnv = {
 };
 
 export default defineConfig(({ mode }): UserConfig => {
-  // Second pass: content script and service worker, each as a single file.
+  // Second pass: content script as a single classic IIFE.
   if (mode === "scripts") {
     return {
       define: defineEnv,
@@ -49,6 +50,27 @@ export default defineConfig(({ mode }): UserConfig => {
           formats: ["iife"],
           name: "CallLedgerContent",
           fileName: () => "src/content/index.js",
+        },
+        rollupOptions: { output: { inlineDynamicImports: true } },
+      },
+    };
+  }
+
+  // MAIN-world ethereum bridge (web_accessible_resources).
+  if (mode === "bridge") {
+    return {
+      define: defineEnv,
+      publicDir: false,
+      build: {
+        outDir: "dist",
+        emptyOutDir: false,
+        sourcemap: false,
+        minify: "esbuild",
+        lib: {
+          entry: { bridge: bridgeEntry },
+          formats: ["iife"],
+          name: "CallLedgerEthBridge",
+          fileName: () => "src/injected/ethereum-bridge.js",
         },
         rollupOptions: { output: { inlineDynamicImports: true } },
       },

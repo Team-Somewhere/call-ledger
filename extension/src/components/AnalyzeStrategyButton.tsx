@@ -1,59 +1,26 @@
-import { useMemo } from "react";
-import { Sparkles, Zap } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, Loader2, Sparkles, Zap } from "lucide-react";
 import type { DetectedPost } from "../content/post-detector";
 import { parseStrategy } from "../features/strategy/strategy-parser";
 import type { Field, StrategyDraft } from "../features/strategy/strategy-types";
 import { cleanPostText } from "../utils/sanitization";
-import { CALLLEDGER_APP_URL } from "../config/constants";
+import { sendMessage } from "../services/extension-messaging";
+import {
+  buildQuoteRequest,
+  type BuiltQuoteRequest,
+  type OrderConfig,
+} from "../features/trading/draft-to-quote";
+import { signTypedDataV4 } from "../content/ethereum-bridge-client";
 
-function buildTradeHandoffUrl(post: DetectedPost, draft: StrategyDraft, _isComplete: boolean): string {
-  const primarySymbol = draft.assets[0]?.status === "known" ? draft.assets[0].value : "WETH";
-  const chain = draft.chain.status === "known" ? draft.chain.value : "base";
-  const direction =
-    draft.direction.status === "known"
-      ? draft.direction.value === "short"
-        ? "sell"
-        : "buy"
-      : "buy";
-  const orderType =
-    draft.orderType.status === "known" && draft.orderType.value === "market"
-      ? "market"
-      : "limit";
-
-  const handoffPayload = {
-    sourcePost: {
-      id: post.postId ?? undefined,
-      url: post.postUrl ?? undefined,
-      author: post.authorHandle ?? undefined,
-      text: post.text,
-    },
-    chain,
-    targetSymbol: primarySymbol,
-    contraSymbol: "USDC",
-    direction,
-    orderType,
-    limitPrice: draft.entryPrice.status === "known" ? draft.entryPrice.value : undefined,
-    stopLoss: draft.stopLoss.status === "known" ? draft.stopLoss.value : undefined,
-    takeProfit: draft.takeProfit.status === "known" ? draft.takeProfit.value : undefined,
-    suggestedQty:
-      draft.positionSize.status === "known" && draft.positionSize.value.unit === "usd"
-        ? String(draft.positionSize.value.amount)
-        : undefined,
-    confidence: draft.confidence,
-    classification: draft.classification,
-  };
-
-  const serialized = encodeURIComponent(JSON.stringify(handoffPayload));
-  return `${CALLLEDGER_APP_URL}/trade?draft=${serialized}`;
-}
-
-/**
- * Strategy Action Button & Panel:
- * 1. Complete Instruction (all parameters known: stop loss, entry, direction) -> "⚡ Copy strategy"
- * 2. Incomplete / Discretionary (missing parameters) -> "✨ Check strategy" (AI analyzes text + chart image)
- */
-
-function Value<T>({ label, field, render }: { label: string; field: Field<T>; render?: (v: T) => string }) {
+function Value<T>({
+  label,
+  field,
+  render,
+}: {
+  label: string;
+  field: Field<T>;
+  render?: (v: T) => string;
+}) {
   return (
     <div className="cl-kv">
       <span className="cl-kv__label">{label}</span>
@@ -62,7 +29,7 @@ function Value<T>({ label, field, render }: { label: string; field: Field<T>; re
           {render ? render(field.value) : String(field.value)}
         </span>
       ) : (
-        <span className="cl-kv__unknown">Not stated (AI will extract)</span>
+        <span className="cl-kv__unknown">Not stated</span>
       )}
     </div>
   );
@@ -86,33 +53,186 @@ export function AnalyzeStrategyButton({
       className={isComplete ? "cl-btn cl-btn--active" : "cl-btn cl-btn--ghost"}
       onClick={onOpen}
       aria-expanded={open}
-      title={isComplete ? "Complete strategy detected. Click to copy." : "Analyze post and chart image with AI agent."}
+      title={
+        isComplete
+          ? "Complete strategy detected. Implement trade without leaving X."
+          : "Analyze post for trading parameters."
+      }
     >
       {isComplete ? <Zap size={12} aria-hidden /> : <Sparkles size={12} aria-hidden />}
-      {open ? "Hide analysis" : isComplete ? "Copy strategy" : "Check strategy"}
+      {open ? "Hide" : isComplete ? "Implement trade" : "Check strategy"}
     </button>
   );
 }
 
-/** The analysis detail panel. Values show their source text and unknowns trigger AI synthesis. */
-AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({ post }: { post: DetectedPost }) {
-  const draft: StrategyDraft = useMemo(() => parseStrategy(cleanPostText(post.text)), [post.text]);
+type TradePhase =
+  | "idle"
+  | "quoting"
+  | "review"
+  | "signing"
+  | "submitting"
+  | "done"
+  | "error";
+
+AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
+  post,
+}: {
+  post: DetectedPost;
+}) {
+  const draft: StrategyDraft = useMemo(
+    () => parseStrategy(cleanPostText(post.text)),
+    [post.text],
+  );
   const isComplete = draft.classification === "trading_instruction";
+
+  const defaultQty =
+    draft.positionSize.status === "known" && draft.positionSize.value.unit === "usd"
+      ? String(draft.positionSize.value.amount)
+      : "10";
+
+  const [qtyUsd, setQtyUsd] = useState(defaultQty);
+  const [phase, setPhase] = useState<TradePhase>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [quote, setQuote] = useState<Record<string, unknown> | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [quoteRequest, setQuoteRequest] = useState<BuiltQuoteRequest | null>(null);
+
+  const runQuote = async () => {
+    setError(null);
+    setPhase("quoting");
+    setOrderId(null);
+    try {
+      const session = await sendMessage<{
+        connected: boolean;
+        address?: string;
+      }>({ type: "GET_SESSION" });
+      if (!session.ok || !session.data.connected || !session.data.address) {
+        const connect = await sendMessage({ type: "BEGIN_WALLET_CONNECT" });
+        if (!connect.ok) {
+          setPhase("error");
+          setError(connect.error.message);
+          return;
+        }
+      }
+
+      const session2 = await sendMessage<{
+        connected: boolean;
+        address?: string;
+      }>({ type: "GET_SESSION" });
+      if (!session2.ok || !session2.data.address) {
+        setPhase("error");
+        setError("Connect your wallet first.");
+        return;
+      }
+
+      const configRes = await sendMessage<OrderConfig>({ type: "GET_ORDER_CONFIG" });
+      if (!configRes.ok) {
+        setPhase("error");
+        setError(configRes.error.message);
+        return;
+      }
+
+      const built = buildQuoteRequest({
+        draft,
+        funderAddress: session2.data.address,
+        qtyUsd,
+        config: configRes.data,
+      });
+      if (!built.ok) {
+        setPhase("error");
+        setError(built.message);
+        return;
+      }
+
+      const quoteRes = await sendMessage<Record<string, unknown>>({
+        type: "REQUEST_QUOTE",
+        payload: { ...built.request },
+      });
+      if (!quoteRes.ok) {
+        setPhase("error");
+        setError(quoteRes.error.message);
+        return;
+      }
+
+      setQuoteRequest(built.request);
+      setQuote(quoteRes.data);
+      setPhase("review");
+    } catch (err) {
+      setPhase("error");
+      setError(err instanceof Error ? err.message : "Quote failed.");
+    }
+  };
+
+  const confirmTrade = async () => {
+    if (!quote || !quoteRequest) return;
+    setError(null);
+    setPhase("signing");
+    try {
+      const session = await sendMessage<{ address?: string; connected: boolean }>({
+        type: "GET_SESSION",
+      });
+      if (!session.ok || !session.data.address) {
+        setPhase("error");
+        setError("Wallet session expired. Connect again.");
+        return;
+      }
+
+      const typed =
+        (quote.evm as { orderTypedData?: unknown } | undefined)?.orderTypedData ??
+        quote.evmOrderTypedData;
+      if (!typed) {
+        setPhase("error");
+        setError("Quote did not include EIP-712 typed data to sign.");
+        return;
+      }
+
+      const signature = await signTypedDataV4(session.data.address, typed as string | Record<string, unknown>);
+      setPhase("submitting");
+
+      const submitRes = await sendMessage<{
+        order: { id: string };
+        flashResponse?: { orderId?: string };
+      }>({
+        type: "SUBMIT_ORDER",
+        payload: {
+          ...quoteRequest,
+          quoteId: quote.quoteId,
+          userSignature: signature,
+          evmOrderTypedData: typed,
+          limitNotionalPrice: quoteRequest.limitNotionalPrice,
+        },
+      });
+
+      if (!submitRes.ok) {
+        setPhase("error");
+        setError(submitRes.error.message);
+        return;
+      }
+
+      setOrderId(submitRes.data.order?.id ?? submitRes.data.flashResponse?.orderId ?? "submitted");
+      setPhase("done");
+    } catch (err) {
+      setPhase("error");
+      setError(err instanceof Error ? err.message : "Trade failed.");
+    }
+  };
 
   return (
     <div className="cl-strategy">
       <div className="cl-strategy__head">
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {isComplete ? <Zap size={14} color="#00ba7c" /> : <Sparkles size={14} color="#f5b94e" />}
-          <strong>{isComplete ? "Complete Strategy Detected" : "AI Strategy Analysis"}</strong>
+          <strong>
+            {isComplete ? "Ready to implement on X" : "Strategy analysis"}
+          </strong>
         </div>
         <span className="cl-muted">Confidence {Math.round(draft.confidence * 100)}%</span>
       </div>
 
       <p className="cl-muted cl-small" style={{ margin: "4px 0 8px" }}>
         {isComplete
-          ? "All execution parameters (Direction, Entry, Stop Loss) were stated by the trader. Ready for 1-click replication."
-          : "Parameters like exact stop loss or direction were not fully stated in text. The CallLedger AI Agent will analyze the post rationale and attached chart image to synthesize the trade setup."}
+          ? "Execute this trade via CallLedger without leaving X. Review the quote, then confirm in MetaMask."
+          : "Not enough explicit parameters for a safe one-click trade. Missing fields stay unknown."}
       </p>
 
       <div className="cl-grid">
@@ -122,9 +242,16 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({ post }: { post: D
         <Value label="Entry" field={draft.entryPrice} render={(v) => `$${v.toLocaleString("en-US")}`} />
         <Value label="Stop loss" field={draft.stopLoss} render={(v) => `$${v.toLocaleString("en-US")}`} />
         <Value label="Take profit" field={draft.takeProfit} render={(v) => `$${v.toLocaleString("en-US")}`} />
-        <Value label="Position size" field={draft.positionSize} render={(v) => (v.unit === "usd" ? `$${v.amount.toLocaleString("en-US")}` : `${v.amount}${v.unit === "percent" ? "%" : ""}`)} />
+        <Value
+          label="Position size"
+          field={draft.positionSize}
+          render={(v) =>
+            v.unit === "usd"
+              ? `$${v.amount.toLocaleString("en-US")}`
+              : `${v.amount}${v.unit === "percent" ? "%" : ""}`
+          }
+        />
         <Value label="Order type" field={draft.orderType} />
-        <Value label="Timeframe" field={draft.timeframe} />
       </div>
 
       {draft.warnings.length > 0 && (
@@ -135,30 +262,83 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({ post }: { post: D
         </ul>
       )}
 
-      <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        {isComplete ? (
-          <a
-            href={buildTradeHandoffUrl(post, draft, true)}
-            target="_blank"
-            rel="noreferrer"
-            className="cl-btn cl-btn--active"
-            style={{ textDecoration: "none", padding: "6px 14px", fontWeight: 700 }}
-          >
-            ⚡ Review & Copy Strategy on CallLedger ↗
-          </a>
-        ) : (
-          <a
-            href={buildTradeHandoffUrl(post, draft, false)}
-            target="_blank"
-            rel="noreferrer"
-            className="cl-btn"
-            style={{ textDecoration: "none", padding: "6px 14px", fontWeight: 700, borderColor: "rgba(245, 185, 78, 0.7)" }}
-          >
-            ✨ Review & Build Strategy on CallLedger ↗
-          </a>
-        )}
-      </div>
+      {isComplete && (
+        <div className="cl-trade">
+          <label className="cl-trade__label">
+            Amount (USDC)
+            <input
+              className="cl-trade__input"
+              type="text"
+              inputMode="decimal"
+              value={qtyUsd}
+              onChange={(e) => setQtyUsd(e.target.value)}
+              disabled={phase === "quoting" || phase === "signing" || phase === "submitting"}
+            />
+          </label>
+
+          {phase === "review" && quote && (
+            <div className="cl-trade__quote">
+              <div className="cl-muted cl-small">Quote ready — confirm to sign & submit</div>
+              <div className="cl-kv">
+                <span className="cl-kv__label">Quote ID</span>
+                <span className="cl-kv__value">{String(quote.quoteId ?? "").slice(0, 18)}…</span>
+              </div>
+              {quote.expectedOutputAmount != null && (
+                <div className="cl-kv">
+                  <span className="cl-kv__label">Expected out</span>
+                  <span className="cl-kv__value">{String(quote.expectedOutputAmount)}</span>
+                </div>
+              )}
+              {quote.priceImpactPercentage != null && (
+                <div className="cl-kv">
+                  <span className="cl-kv__label">Price impact</span>
+                  <span className="cl-kv__value">{String(quote.priceImpactPercentage)}%</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {phase === "done" && orderId && (
+            <div className="cl-trade__done">
+              <CheckCircle2 size={14} /> Order submitted · {orderId.slice(0, 12)}…
+            </div>
+          )}
+
+          {error && <div className="cl-follow__error">{error}</div>}
+
+          <div className="cl-trade__actions">
+            {(phase === "idle" || phase === "error" || phase === "done") && (
+              <button
+                type="button"
+                className="cl-btn cl-btn--active"
+                onClick={() => void runQuote()}
+              >
+                {phase === "done" ? "Get new quote" : "Get quote"}
+              </button>
+            )}
+            {phase === "quoting" && (
+              <button type="button" className="cl-btn" disabled>
+                <Loader2 size={12} className="cl-spin" /> Quoting…
+              </button>
+            )}
+            {phase === "review" && (
+              <button
+                type="button"
+                className="cl-btn cl-btn--active"
+                onClick={() => void confirmTrade()}
+              >
+                Confirm & sign in MetaMask
+              </button>
+            )}
+            {(phase === "signing" || phase === "submitting") && (
+              <button type="button" className="cl-btn" disabled>
+                <Loader2 size={12} className="cl-spin" />
+                {phase === "signing" ? "Awaiting signature…" : "Submitting…"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-

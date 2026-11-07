@@ -350,7 +350,6 @@ export function Topbar() {
     isConnecting,
     error,
     connect,
-    connectGuest,
     disconnect,
   } = useWalletSession();
 
@@ -491,14 +490,6 @@ export function Topbar() {
               )}
             </button>
 
-            <button
-              onClick={() => void connectGuest()}
-              disabled={isConnecting}
-              title="One-click demo guest session without MetaMask"
-              className="border border-[#E8DFD1] hover:border-[#78716C] text-[#78716C] hover:text-[#171717] bg-[#FFFAF3] rounded-sm px-2 py-1 text-[10px] font-mono transition"
-            >
-              Guest Demo
-            </button>
           </div>
         )}
       </div>
@@ -510,12 +501,6 @@ export function Topbar() {
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">{error}</span>
           </div>
-          <button
-            onClick={() => void connectGuest()}
-            className="text-[10px] underline hover:no-underline font-bold shrink-0"
-          >
-            Use Guest Mode instead
-          </button>
         </div>
       )}
     </header>

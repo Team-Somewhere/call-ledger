@@ -27,6 +27,12 @@ creatorRouter.post(
 // Global creator directory.
 creatorRouter.get("/", asyncHandler(socialCreatorController.getCreators));
 
+// Lookup by X handle (must be registered before /:id).
+creatorRouter.get(
+  "/by-handle/:handle",
+  asyncHandler(socialCreatorController.getCreatorByHandle),
+);
+
 // Creator profile (multi-source aware).
 creatorRouter.get("/:id", asyncHandler(socialCreatorController.getCreatorById));
 
