@@ -3,31 +3,32 @@
 import React, { useRef, useState, useEffect } from "react";
 import { motion, useScroll, useTransform, useSpring } from "motion/react";
 import { Check, CheckCircle2, ShieldCheck } from "lucide-react";
+import { XLogo } from "./XLogo";
 
 const TIMELINE_STAGES = [
   {
     step: 1,
     time: "NOV 05 · 20:15 UTC",
-    title: "SIGNAL CAPTURED & ATTESTED",
-    desc: "Post captured on X and anchored on Arkiv block #28,941,029. Target entry $174.50.",
+    title: "1. CALL POSTED ON X & SAVED",
+    desc: "Doctor Profit tweets $SOL long trade setup. Captured and saved to blockchain immediately. Target entry: $174.50.",
     price: "$174.50 SPOT",
-    badge: "OPEN",
+    badge: "POSTED",
     badgeColor: "bg-[#F62440] text-white",
   },
   {
     step: 2,
     time: "NOV 06 · 04:30 UTC",
-    title: "ENTRY TARGET TOUCHED",
-    desc: "Asset entered designated execution zone. Real-time webhook notification dispatched to followers.",
+    title: "2. ENTRY TARGET REACHED",
+    desc: "Solana price drops into the exact entry zone. Followers get an instant alert with copy-trade option.",
     price: "$174.50 FILLED",
-    badge: "ACTIVE",
+    badge: "ENTRY HIT",
     badgeColor: "bg-[#171717] text-[#FFFAF3]",
   },
   {
     step: 3,
     time: "NOV 06 · 14:00 UTC",
-    title: "CONTINUATION CONFIRMED",
-    desc: "4H candle closed at $179.20. Market price confirms the creator's structural momentum.",
+    title: "3. TRADE RUNS IN PROFIT",
+    desc: "Price climbs to $179.20. Live price feed records +2.7% gain in real-time.",
     price: "$179.20 (+2.7%)",
     badge: "IN PROFIT",
     badgeColor: "bg-[#16A34A]/20 text-[#16A34A] border border-[#16A34A]/40",
@@ -35,10 +36,10 @@ const TIMELINE_STAGES = [
   {
     step: 4,
     time: "NOV 07 · 09:00 UTC",
-    title: "TARGET EXECUTED & RESOLVED",
-    desc: "Trade completed at $188.40. Outcome ledger finalized with cryptographically proven history.",
+    title: "4. TARGET HIT & VERIFIED",
+    desc: "Target price achieved at $188.40. The trade is marked as a win on the trader's permanent ledger score.",
     price: "$188.40 (+7.9%)",
-    badge: "RESOLVED",
+    badge: "PROFIT HIT",
     badgeColor: "bg-[#16A34A] text-white",
   },
 ];
@@ -66,92 +67,94 @@ export const SignalLedgerTimeline: React.FC = () => {
 
   return (
     <section ref={containerRef} className="relative h-[250vh] bg-[#FFF2DB]/50 text-[#171717]">
-      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden px-4 sm:px-6 lg:px-12 py-6">
-        <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center font-mono">
-          {/* Left Narrative */}
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden px-6 sm:px-10 lg:px-16 py-6 sm:py-8">
+        <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center font-mono">
+          {/* Left Narrative - Slightly Increased */}
           <div className="lg:col-span-5 space-y-5">
-            <span className="text-xs text-[#78716C] tracking-widest uppercase block">
-              // 03 · OUTCOME LEDGER
-            </span>
-            <h2 className="font-sans text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
-              The timeline locks.
+            <div className="inline-flex items-center gap-2.5 border-2 border-[#E8DFD1] bg-[#FFFAF3] px-3.5 py-1.5 rounded-sm text-xs uppercase tracking-widest text-[#171717] font-bold">
+              <XLogo className="w-4 h-4 text-[#171717]" />
+              <span>// REAL OUTCOME TRACKING</span>
+            </div>
+            <h2 className="font-sans text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-[#171717] leading-[1.08]">
+              Follow the call.
               <br />
-              <span className="text-[#16A34A]">You scroll through history.</span>
+              <span className="text-[#16A34A]">See what really happened.</span>
             </h2>
-            <p className="text-xs sm:text-sm text-[#78716C] font-sans leading-relaxed">
-              The screen stays centered here until all 4 timeline checkpoints are
-              unlocked. Watch how CallLedger tracks price movements and verifies
-              whether the call delivered or hit invalidation.
+            <p className="text-sm sm:text-base text-[#78716C] font-sans leading-relaxed">
+              Did the influencer&apos;s call make money, or did it get stopped out? CallLedger tracks every stage of the trade in real-time, giving you an honest record of who actually wins.
             </p>
-            <div className="p-3.5 border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm text-xs text-[#171717] flex items-center justify-between">
-              <span>UNLOCKED: {activeCount} / 4 NODES</span>
-              <span className="text-[#16A34A] font-bold">
-                {activeCount === 4 ? "ALL NODES VERIFIED" : "SCROLL TO ADVANCE"}
+            <div className="p-3.5 border-2 border-[#E8DFD1] bg-[#FFFAF3] rounded-sm text-xs sm:text-sm text-[#171717] flex items-center justify-between font-bold">
+              <span>UNLOCKED: {activeCount} / 4 STEPS</span>
+              <span className="text-[#16A34A]">
+                {activeCount === 4 ? "ALL 4 STEPS VERIFIED" : "SCROLL TO ADVANCE"}
               </span>
             </div>
           </div>
 
-          {/* Right Centered Interactive Timeline */}
+          {/* Right Centered Interactive Timeline - Moderately Increased Size */}
           <div className="lg:col-span-7">
-            <div className="relative pl-8 sm:pl-10">
+            <div className="relative pl-10 sm:pl-12">
               {/* Background static track */}
-              <div className="absolute left-[13px] sm:left-[17px] top-2 bottom-6 w-1 bg-[#E8DFD1] rounded-full" />
+              <div className="absolute left-[13px] sm:left-[17px] top-3 bottom-5 w-1.5 bg-[#E8DFD1] rounded-full" />
 
               {/* Dynamic growing line */}
               <motion.div
                 style={{ height: smoothLineHeight }}
-                className="absolute left-[13px] sm:left-[17px] top-2 w-1 bg-[#16A34A] rounded-full origin-top shadow-[0_0_10px_rgba(22,163,74,0.4)]"
+                className="absolute left-[13px] sm:left-[17px] top-3 w-1.5 bg-[#16A34A] rounded-full origin-top shadow-[0_0_12px_rgba(22,163,74,0.5)]"
               />
 
-              <div className="space-y-6 sm:space-y-7">
+              <div className="space-y-4 sm:space-y-4.5">
                 {TIMELINE_STAGES.map((event, idx) => {
                   const isReached = idx < activeCount;
 
                   return (
-                    <div key={event.step} className="relative flex items-start gap-4 sm:gap-6">
+                    <div key={event.step} className="relative flex items-center gap-3.5 sm:gap-5">
                       {/* Node Bullet */}
                       <motion.div
                         animate={{
-                          scale: isReached ? [1, 1.3, 1] : 0.8,
+                          scale: isReached ? [1, 1.25, 1] : 0.85,
                           backgroundColor: isReached ? "#16A34A" : "#E8DFD1",
                           borderColor: isReached ? "#FFFAF3" : "#E8DFD1",
                         }}
-                        transition={{ duration: 0.3 }}
-                        className="absolute -left-[27px] sm:-left-[31px] top-1.5 w-6 h-6 rounded-full border-4 border-[#FFFAF3] flex items-center justify-center text-[9px] font-bold text-white shadow-xs z-10"
+                        transition={{ duration: 0.25 }}
+                        className="absolute -left-[30px] sm:-left-[34px] w-7 h-7 rounded-full border-2 border-[#FFFAF3] flex items-center justify-center text-[10px] font-bold text-white shadow-xs z-10"
                       >
-                        {isReached && <Check className="w-3 h-3 stroke-[3]" />}
+                        {isReached && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                       </motion.div>
 
-                      {/* Event Box */}
+                      {/* Event Card - Nicely proportioned, readable, and filled */}
                       <motion.div
                         animate={{
-                          opacity: isReached ? 1 : 0.25,
-                          x: isReached ? 0 : 16,
+                          opacity: isReached ? 1 : 0.28,
+                          x: isReached ? 0 : 12,
                           backgroundColor: isReached ? "#FFFAF3" : "#FFF8ED",
                         }}
-                        transition={{ duration: 0.4 }}
-                        className={`flex-1 p-3.5 sm:p-4 rounded-sm border transition-all ${
-                          isReached ? "border-[#171717] shadow-sm" : "border-[#E8DFD1]"
+                        transition={{ duration: 0.35 }}
+                        className={`w-full p-4 sm:p-4.5 rounded-lg border-2 transition-all ${
+                          isReached ? "border-[#171717] shadow-md" : "border-[#E8DFD1]"
                         }`}
                       >
-                        <div className="flex items-center justify-between text-[10px] pb-1">
-                          <span className="text-[#78716C] font-bold">{event.time}</span>
-                          <span className={`px-2 py-0.5 rounded-xs font-bold text-[9px] ${event.badgeColor}`}>
+                        <div className="flex items-center justify-between text-xs sm:text-sm gap-2">
+                          <div className="flex items-center gap-2.5 overflow-hidden">
+                            <h4 className="text-xs sm:text-sm md:text-base font-bold text-[#171717] truncate">
+                              {event.title}
+                            </h4>
+                            <span className="text-[10px] sm:text-xs text-[#78716C] font-semibold shrink-0">
+                              · {event.time}
+                            </span>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-xs font-bold text-[10px] shrink-0 ${event.badgeColor}`}>
                             {event.badge}
                           </span>
                         </div>
 
-                        <h4 className="text-xs sm:text-sm font-bold text-[#171717] mt-0.5">
-                          {event.title}
-                        </h4>
-
-                        <p className="text-[11px] font-sans text-[#78716C] leading-snug mt-1">
+                        <p className="text-xs sm:text-sm font-sans text-[#78716C] leading-snug mt-1.5">
                           {event.desc}
                         </p>
 
-                        <div className="mt-2.5 pt-2 border-t border-[#E8DFD1]/70 flex items-center justify-between text-[10px]">
-                          <span className="text-[#78716C]">PRICE AT LOG:</span>
-                          <span className="font-bold text-[#171717]">{event.price}</span>
+                        <div className="mt-2.5 pt-2 border-t border-[#E8DFD1]/70 flex items-center justify-between text-xs sm:text-sm">
+                          <span className="text-[#78716C] font-bold text-[11px] uppercase">PRICE AT STEP:</span>
+                          <span className="font-extrabold text-[#171717] text-xs sm:text-sm font-mono">{event.price}</span>
                         </div>
                       </motion.div>
                     </div>
@@ -167,4 +170,3 @@ export const SignalLedgerTimeline: React.FC = () => {
 };
 
 export default SignalLedgerTimeline;
-
