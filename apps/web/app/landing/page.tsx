@@ -1,102 +1,102 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ShieldCheck, ExternalLink } from "lucide-react";
+import { ArrowRight, ShieldCheck, ExternalLink, Activity, Sparkles, Check } from "lucide-react";
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useSpring,
+  AnimatePresence,
+} from "motion/react";
 
-// ─── Reduced-motion check ───────────────────────────────────────────────────
+// ─── Scramble / Cipher Text Effect ──────────────────────────────────────────
 
-function isReducedMotion() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-// ─── Utility: scroll-triggered reveal (fires once when element enters) ───────
-
-function useReveal(threshold = 0.12) {
-  const ref = useRef<HTMLElement>(null);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (isReducedMotion()) { setVisible(true); return; }
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) { setVisible(true); obs.disconnect(); }
-      },
-      { threshold }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [threshold]);
-
-  return { ref, visible };
-}
-
-// ─── Utility: scroll progress within an element (0 → 1) ─────────────────────
-// Used to drive timeline line growth and sticky section step changes.
-
-function useScrollProgress(ref: React.RefObject<HTMLElement | null>) {
-  const [progress, setProgress] = useState(0);
+function ScrambleText({
+  text,
+  trigger = true,
+  className = "",
+}: {
+  text: string;
+  trigger?: boolean;
+  className?: string;
+}) {
+  const [displayText, setDisplayText] = useState(text);
+  const chars = "!<>-_/[]{}—=+*^?#@$%0123456789";
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el || isReducedMotion()) { setProgress(1); return; }
+    if (!trigger) return;
+    let iteration = 0;
+    const interval = setInterval(() => {
+      setDisplayText(
+        text
+          .split("")
+          .map((char, index) => {
+            if (char === " " || char === "\n") return char;
+            if (index < iteration) {
+              return text[index];
+            }
+            return chars[Math.floor(Math.random() * chars.length)] ?? char;
+          })
+          .join("")
+      );
 
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      const viewH = window.innerHeight;
-      // progress goes 0→1 as the element scrolls from bottom to top of viewport
-      const p = Math.max(0, Math.min(1, (viewH - rect.top) / (viewH + rect.height)));
-      setProgress(p);
-    };
+      if (iteration >= text.length) {
+        clearInterval(interval);
+      }
+      iteration += 1 / 2;
+    }, 28);
 
-    update();
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
-    };
-  }, [ref]);
+    return () => clearInterval(interval);
+  }, [text, trigger]);
 
-  return progress;
+  return <span className={className}>{displayText}</span>;
 }
 
-// ─── Shared CTA button ───────────────────────────────────────────────────────
+// ─── Interactive Primary CTA Button ─────────────────────────────────────────
 
 function CtaButton({
   variant = "dark",
   label = "Open CallLedger",
 }: {
-  variant?: "dark" | "light";
+  variant?: "dark" | "cream";
   label?: string;
 }) {
-  const base =
-    "inline-flex items-center gap-2 px-6 py-3 rounded-sm text-sm font-mono font-bold tracking-wider transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 active:scale-[0.98]";
-  const styles =
-    variant === "dark"
-      ? `${base} bg-[#171717] text-[#FFFAF3] hover:bg-[#2a2a2a] focus-visible:outline-[#FFFAF3]`
-      : `${base} bg-[#FFFAF3] text-[#171717] border border-[#FFFAF3]/30 hover:bg-white focus-visible:outline-white`;
+  const isDark = variant === "dark";
 
   return (
-    <Link href="/" className={styles} aria-label="Open CallLedger application">
-      {label}
-      <ArrowRight className="w-4 h-4" aria-hidden="true" />
-    </Link>
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      className="inline-block"
+    >
+      <Link
+        href="/"
+        className={`group relative inline-flex items-center gap-2.5 px-6 py-3.5 rounded-sm text-xs font-mono font-bold tracking-wider overflow-hidden transition-all duration-300 border ${
+          isDark
+            ? "bg-[#171717] text-[#FFFAF3] border-[#171717] hover:bg-[#FFF2DB] hover:text-[#171717] hover:border-[#171717] shadow-sm"
+            : "bg-[#FFF2DB] text-[#171717] border-[#E8DFD1] hover:bg-[#171717] hover:text-[#FFFAF3] hover:border-white/30 shadow-md"
+        }`}
+        aria-label="Open CallLedger application"
+      >
+        <span className="relative z-10 flex items-center gap-2">
+          {label}
+          <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-1" />
+        </span>
+      </Link>
+    </motion.div>
   );
 }
 
-// ─── Ledger mark / timestamp ornament ───────────────────────────────────────
+// ─── Section Header Stamp ───────────────────────────────────────────────────
 
-function LedgerMark({ time }: { time: string }) {
+function SectionStamp({ code, label }: { code: string; label: string }) {
   return (
-    <div className="flex items-center gap-3 select-none" aria-hidden="true">
-      <div className="w-1.5 h-1.5 rounded-full bg-[#F62440] shrink-0" />
-      <span className="text-[10px] font-mono text-[#78716C] tracking-widest uppercase">
-        {time}
+    <div className="flex items-center gap-2.5 select-none" aria-hidden="true">
+      <span className="w-2 h-2 rounded-full bg-[#F62440] animate-pulse shrink-0" />
+      <span className="text-[10px] font-mono uppercase tracking-[0.22em] text-[#78716C]">
+        [{code}] {label}
       </span>
     </div>
   );
@@ -106,761 +106,726 @@ function LedgerMark({ time }: { time: string }) {
 // A. HERO — "The call"
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const STREAM_POSTS = [
-  { handle: "@ThorneMacro",   text: "$SOL breakout confirmed — entered at $174. 4H close above $178 needed.", time: "just now", hot: true  },
-  { handle: "@NovaCapDesk",   text: "Risk-off vibes across board. Keeping $BTC exposure tight below 90k.",    time: "2m",       hot: false },
-  { handle: "@ElenaDeFi",     text: "ETH funding rates normalising. Building a spot position quietly.",        time: "4m",       hot: false },
-  { handle: "@SatoshiPulseX", text: "BTC dominance peak incoming. Alts rotation setup looks clean on the 1D.", time: "7m",      hot: false },
-  { handle: "@CrossTrades",   text: "AVAX / BTC pair weak. Short bias holds while price below $34.5.",        time: "9m",       hot: false },
+const HERO_STREAM_POSTS = [
+  {
+    handle: "@ThorneMacro",
+    avatar: "AT",
+    text: "$SOL breakout confirmed — entered at $174. 4H close above $178 needed.",
+    time: "just now",
+    tag: "HIGH CONVICTION",
+    tagColor: "text-[#16A34A] border-[#16A34A]/30 bg-[#16A34A]/10",
+  },
+  {
+    handle: "@NovaCapDesk",
+    avatar: "NC",
+    text: "Risk-off rotation across L1s. Keeping $BTC exposure tight below $90k.",
+    time: "2m",
+    tag: "MARKET COMMENTARY",
+    tagColor: "text-[#78716C] border-[#E8DFD1] bg-[#FFF2DB]",
+  },
+  {
+    handle: "@ElenaDeFi",
+    avatar: "EV",
+    text: "ETH funding rates normalized. Quietly building spot accumulation here.",
+    time: "4m",
+    tag: "ALPHA CALL",
+    tagColor: "text-[#F62440] border-[#F62440]/30 bg-[#F62440]/10",
+  },
+  {
+    handle: "@SatoshiPulseX",
+    avatar: "SP",
+    text: "BTC dominance peak incoming. Altcoin rotation setup clean on the 1D chart.",
+    time: "7m",
+    tag: "TRADE SETUP",
+    tagColor: "text-[#16A34A] border-[#16A34A]/30 bg-[#16A34A]/10",
+  },
 ];
 
 function HeroSection() {
-  // Which posts are "mounted" into the DOM (before animation)
-  const [mounted, setMounted] = useState<number[]>([0]);
-  // Which posts have finished their enter animation
-  const [entered, setEntered] = useState<Set<number>>(new Set([0]));
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end start"],
+  });
 
-  useEffect(() => {
-    if (isReducedMotion()) {
-      setMounted(STREAM_POSTS.map((_, i) => i));
-      setEntered(new Set(STREAM_POSTS.map((_, i) => i)));
-      return;
-    }
-
-    // After 1s, begin sliding posts in one-by-one
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    STREAM_POSTS.forEach((_, i) => {
-      if (i === 0) return; // first post is already in
-      timers.push(
-        setTimeout(() => {
-          setMounted((prev) => [...prev, i]);
-          // Let it render at "pre-enter" state, then trigger enter
-          setTimeout(() => setEntered((prev) => new Set([...prev, i])), 60);
-        }, 900 + i * 1600)
-      );
-    });
-    return () => timers.forEach(clearTimeout);
-  }, []);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0.2]);
+  const heroY = useTransform(scrollYProgress, [0, 0.7], [0, -40]);
+  const feedY = useTransform(scrollYProgress, [0, 0.7], [0, 30]);
 
   return (
     <section
-      className="relative min-h-[100svh] flex flex-col justify-center overflow-hidden"
+      ref={containerRef}
+      className="relative min-h-[100svh] flex flex-col justify-center overflow-hidden pt-20 pb-16"
       aria-labelledby="hero-heading"
     >
-      {/* Background dot grid */}
-      <div className="absolute inset-0 ledger-dot-grid opacity-40" aria-hidden="true" />
-      {/* Gradient vignette */}
+      <div className="absolute inset-0 ledger-dot-grid opacity-35" aria-hidden="true" />
       <div className="absolute inset-0 bg-gradient-to-b from-[#FFFAF3] via-transparent to-[#FFFAF3]" aria-hidden="true" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 lg:px-16 w-full pt-24 pb-20 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-
-        {/* ── Left: Headline + CTA ── */}
-        <div className="space-y-8">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#F62440] animate-pulse" aria-hidden="true" />
-            <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#78716C]">
-              Public trade calls · Structured · Traceable
+      <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 lg:px-16 w-full grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-14 items-center">
+        {/* Left Column: Headline & Value Prop */}
+        <motion.div
+          style={{ opacity: heroOpacity, y: heroY }}
+          className="lg:col-span-7 space-y-7"
+        >
+          <div className="inline-flex items-center gap-2 border border-[#E8DFD1] bg-[#FFF2DB]/80 px-2.5 py-1 rounded-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-ping" />
+            <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#171717]">
+              PUBLIC TRADE CALLS · VERIFIABLE SIGNALS
             </span>
           </div>
 
-          <div className="flex items-baseline gap-1" aria-hidden="true">
-            <span className="text-[11px] font-mono font-bold text-[#F62440] tracking-widest uppercase border border-[#F62440]/30 px-1.5 py-0.5 rounded-sm">CALL</span>
-            <span className="text-[11px] font-mono font-bold text-[#171717] tracking-widest uppercase border border-[#E8DFD1] px-1.5 py-0.5 rounded-sm">LEDGER</span>
+          <div className="space-y-3">
+            <h1
+              id="hero-heading"
+              className="text-5xl sm:text-6xl xl:text-7xl font-bold tracking-tight text-[#171717] leading-[1.04]"
+            >
+              Every call.
+              <br />
+              <span className="text-[#F62440] underline decoration-[#F62440]/30 underline-offset-8">
+                On record.
+              </span>
+            </h1>
+
+            <p className="text-base sm:text-lg text-[#78716C] font-sans leading-relaxed max-w-xl pt-2">
+              Traders post high-conviction calls in fast-moving streams. CallLedger
+              captures the post, parses the signal, tracks the outcome on-chain,
+              and connects directly to non-custodial execution through Definitive Flash.
+            </p>
           </div>
 
-          <h1 id="hero-heading" className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[#171717] leading-[1.05]">
-            Every call.<br />
-            <span className="text-[#F62440]">On record.</span>
-          </h1>
-
-          <p className="text-base md:text-lg text-[#78716C] font-sans leading-relaxed max-w-md">
-            Public crypto trade calls move fast and vanish. CallLedger captures
-            them from creator posts, structures each signal, and keeps an
-            auditable record — so you can follow the call and see what happened.
-          </p>
-
-          <div className="flex flex-wrap gap-3 items-center">
+          <div className="pt-2 flex flex-wrap items-center gap-4">
             <CtaButton variant="dark" label="Open CallLedger" />
-            <div className="flex items-center gap-2">
-              <span className="w-1 h-1 rounded-full bg-[#16A34A] animate-pulse" aria-hidden="true" />
-              <span className="text-[10px] font-mono text-[#78716C] uppercase tracking-widest">Live now</span>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-sm border border-[#E8DFD1] bg-[#FFFAF3] text-[10px] font-mono text-[#78716C]">
+              <Activity className="w-3.5 h-3.5 text-[#16A34A]" />
+              <span>ARKIV ATTESTED · BASE & ETH READY</span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* ── Right: One-by-one animated feed ── */}
-        <div
-          className="relative lg:h-[460px] flex flex-col gap-0 overflow-hidden"
-          aria-label="Sample live feed of creator posts (illustrative)"
-          role="img"
+        {/* Right Column: Live Feed Artifact that reveals smoothly as user scrolls */}
+        <motion.div
+          style={{ y: feedY }}
+          className="lg:col-span-5"
+          aria-label="Sample live feed stream"
         >
-          <div className="text-[9px] font-mono text-[#78716C] uppercase tracking-widest pb-2 mb-3 border-b border-[#E8DFD1] flex items-center gap-2 shrink-0">
-            <span className="w-1 h-1 rounded-full bg-[#16A34A] animate-pulse" aria-hidden="true" />
-            // LIVE FEED · POLLS EVERY 16S
-          </div>
+          <div className="border border-[#171717] rounded-sm bg-[#FFFAF3] shadow-lg overflow-hidden">
+            <div className="bg-[#171717] px-4 py-2.5 flex items-center justify-between text-[10px] font-mono text-white/80">
+              <span className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] animate-pulse" />
+                // LIVE STREAM FEED
+              </span>
+              <span className="text-[#FFE5BF] text-[9px] uppercase tracking-wider">
+                POLLING 16s
+              </span>
+            </div>
 
-          {/* Posts list — newer items slide in from the top */}
-          <div className="relative flex flex-col gap-2 overflow-hidden flex-1">
-            {mounted.map((i) => {
-              const post = STREAM_POSTS[i]!;
-              const isIn = entered.has(i);
-              const isNewest = i === mounted[0];
-
-              return (
-                <article
-                  key={i}
-                  className={`border rounded-sm p-3 text-xs font-mono shrink-0 transition-all duration-700 ease-out ${
-                    isNewest
-                      ? "border-[#F62440]/40 bg-[#FFF2DB]"
-                      : "border-[#E8DFD1] bg-[#FFFAF3]"
-                  }`}
-                  style={{
-                    opacity:    isIn ? (1 - mounted.indexOf(i) * 0.14) : 0,
-                    transform:  isIn ? `translateY(0px)` : `translateY(-24px)`,
+            <div className="p-3.5 space-y-2.5 divide-y divide-[#E8DFD1]/70">
+              {HERO_STREAM_POSTS.map((post, index) => (
+                <motion.article
+                  key={post.handle}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.55,
+                    delay: 0.15 + index * 0.18,
+                    ease: [0.22, 1, 0.36, 1],
                   }}
+                  className={`pt-2.5 first:pt-0 font-mono text-xs transition-colors p-2 rounded-xs ${
+                    index === 0
+                      ? "bg-[#FFF2DB]/90 border border-[#F62440]/30 shadow-xs"
+                      : "hover:bg-[#FFF2DB]/40"
+                  }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-[#E8DFD1] flex items-center justify-center text-[8px] font-bold text-[#78716C] shrink-0">
-                        {post.handle.slice(1, 3).toUpperCase()}
+                      <div className="w-5 h-5 rounded-full bg-[#171717] text-[#FFFAF3] flex items-center justify-center text-[8px] font-bold">
+                        {post.avatar}
                       </div>
-                      <span className="font-bold text-[#171717] text-[11px]">{post.handle}</span>
-                      {isNewest && (
-                        <span className="text-[9px] text-[#F62440] font-mono border border-[#F62440]/30 px-1 py-px rounded-sm animate-pulse">
-                          NEW
-                        </span>
-                      )}
+                      <span className="font-bold text-[#171717] text-[11px]">
+                        {post.handle}
+                      </span>
+                      <span className={`text-[8px] px-1 py-px rounded-xs border font-mono ${post.tagColor}`}>
+                        {post.tag}
+                      </span>
                     </div>
                     <span className="text-[9px] text-[#78716C]">{post.time}</span>
                   </div>
-                  <p className="text-[#292524] leading-snug">{post.text}</p>
-                </article>
-              );
-            })}
+                  <p className="text-[11px] font-sans text-[#292524] leading-snug">
+                    {post.text}
+                  </p>
+                </motion.article>
+              ))}
+            </div>
           </div>
-
-          {/* Bottom fade */}
-          <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-[#FFFAF3] to-transparent pointer-events-none" aria-hidden="true" />
-        </div>
+        </motion.div>
       </div>
 
-      {/* Scroll cue */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1" aria-hidden="true">
-        <div className="w-px h-10 bg-gradient-to-b from-[#171717]/20 to-transparent animate-pulse" />
-        <span className="text-[9px] font-mono text-[#78716C] tracking-widest uppercase">scroll</span>
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1.5 pointer-events-none" aria-hidden="true">
+        <span className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#78716C]">
+          SCROLL TO UNPACK
+        </span>
+        <motion.div
+          animate={{ y: [0, 6, 0] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+          className="w-px h-6 bg-gradient-to-b from-[#171717] to-transparent"
+        />
       </div>
     </section>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// B. THE PROBLEM — scattered feed, boxes animate in one by one
+// B. THE PROBLEM — "A call disappears into the feed" (Dynamic Floating Motion)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SCATTER_POSTS = [
-  { top: "4%",  left: "2%",  text: "$BTC setup forming…",             dim: true,  rotate: "-1deg",   delay: 0   },
-  { top: "16%", left: "32%", text: "SOL breaking out of range",        dim: false, rotate: "0.5deg",  delay: 80  },
-  { top: "10%", left: "57%", text: "ETH funding rates spike",          dim: true,  rotate: "1.2deg",  delay: 160 },
-  { top: "36%", left: "4%",  text: "great thread on L2 fees",          dim: true,  rotate: "-0.8deg", delay: 240 },
-  { top: "33%", left: "36%", text: "$AVAX bearish divergence — SHORT", dim: false, rotate: "-1.5deg", delay: 320, signal: true },
-  { top: "50%", left: "14%", text: "good morning CT 🌅",               dim: true,  rotate: "0.3deg",  delay: 400 },
-  { top: "56%", left: "52%", text: "rotate into DeFi bluechips now",   dim: false, rotate: "1deg",    delay: 480 },
-  { top: "68%", left: "4%",  text: "risk-off until macro clears",      dim: true,  rotate: "-0.5deg", delay: 560 },
-  { top: "70%", left: "36%", text: "BTC dominance peaking…",           dim: true,  rotate: "0.8deg",  delay: 640 },
+const CHAOTIC_FRAGMENTS = [
+  { id: 1, text: "just bought more $SOL don't fade", xInit: -140, yInit: -60, xDrift: -40, yDrift: -80, rot: -8 },
+  { id: 2, text: "$BTC 100k programmed soon?", xInit: 160, yInit: -90, xDrift: 70, yDrift: -120, rot: 12 },
+  { id: 3, text: "macro looks weak until FOMC", xInit: -120, yInit: 70, xDrift: -80, yDrift: 110, rot: -6 },
+  { id: 4, text: "L2 fees dropping 95% today", xInit: 130, yInit: 60, xDrift: 90, yDrift: 100, rot: 7 },
+  { id: 5, text: "gm to everyone holding spot", xInit: -180, yInit: 10, xDrift: -110, yDrift: 20, rot: 4 },
+  { id: 6, text: "funding rates through the roof", xInit: 190, yInit: -10, xDrift: 130, yDrift: -20, rot: -9 },
 ];
 
 function ProblemSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const { ref: innerRef, visible } = useReveal(0.08);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start end", "end start"],
+  });
 
-  // Merge refs
-  const setRef = useCallback(
-    (el: HTMLElement | null) => {
-      (sectionRef as React.MutableRefObject<HTMLElement | null>).current = el;
-      (innerRef as React.MutableRefObject<HTMLElement | null>).current = el;
-    },
-    [innerRef]
-  );
+  // Dramatic scroll-driven dispersion & blur as user scrolls through the problem!
+  const fragmentsSpread = useTransform(scrollYProgress, [0.15, 0.7], [0, 1]);
+  const callHighlightScale = useTransform(scrollYProgress, [0.3, 0.6], [0.94, 1.05]);
+  const darkBgIntensity = useTransform(scrollYProgress, [0.2, 0.6], ["#171717", "#0d0d0d"]);
 
   return (
-    <section
-      ref={setRef}
-      className="relative py-28 md:py-36 overflow-hidden bg-[#171717]"
+    <motion.section
+      ref={containerRef}
+      style={{ backgroundColor: darkBgIntensity }}
+      className="relative min-h-[120vh] py-32 flex flex-col justify-center overflow-hidden text-[#FFFAF3]"
       aria-labelledby="problem-heading"
     >
-      <div className="absolute inset-0 halftone-banner opacity-25" aria-hidden="true" />
+      <div className="absolute inset-0 halftone-banner opacity-20 pointer-events-none" aria-hidden="true" />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 lg:px-16">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-
-          {/* ── Left: scattered post fragments, staggered in ── */}
-          <div
-            className="relative h-80 md:h-[420px]"
-            aria-label="Illustrative scattered feed — calls get buried"
-            role="img"
+      <div className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 lg:px-16 w-full">
+        <div className="max-w-2xl mx-auto text-center space-y-4 mb-16">
+          <SectionStamp code="01 // NOISE" label="THE PROBLEM" />
+          <h2
+            id="problem-heading"
+            className="text-4xl sm:text-5xl font-bold tracking-tight text-[#FFFAF3] leading-tight"
           >
-            {SCATTER_POSTS.map((p, i) => (
-              <div
-                key={i}
-                className={`absolute px-2 py-1.5 rounded-sm text-[10px] font-mono border max-w-[170px] leading-snug transition-all duration-700 ease-out ${
-                  "signal" in p && p.signal
-                    ? "border-[#F62440]/60 bg-[#F62440]/15 text-[#FFFAF3]"
-                    : p.dim
-                    ? "border-[#E8DFD1]/10 bg-white/4 text-white/25"
-                    : "border-[#E8DFD1]/20 bg-white/8 text-white/60"
-                }`}
+            The call lands.
+            <br />
+            <span className="text-[#F62440]">Then it disappears in the feed.</span>
+          </h2>
+          <p className="text-sm sm:text-base text-white/60 font-sans leading-relaxed">
+            Real trades get posted alongside memes, commentary, and replies. Within
+            minutes, key targets like entry, invalidation, and timeframe are washed away.
+          </p>
+        </div>
+
+        {/* Dynamic Interactive Stage: Chaotic Feed Fragments drifting apart */}
+        <div className="relative h-[380px] sm:h-[420px] max-w-3xl mx-auto flex items-center justify-center">
+          {/* Drifting noisy post chips */}
+          {CHAOTIC_FRAGMENTS.map((item) => {
+            return (
+              <motion.div
+                key={item.id}
                 style={{
-                  top:       p.top,
-                  left:      p.left,
-                  transform: visible
-                    ? `rotate(${p.rotate})`
-                    : `rotate(${p.rotate}) translateY(16px)`,
-                  opacity:          visible ? 1 : 0,
-                  transitionDelay:  visible ? `${p.delay}ms` : "0ms",
+                  x: useTransform(fragmentsSpread, [0, 1], [item.xInit * 0.6, item.xInit + item.xDrift]),
+                  y: useTransform(fragmentsSpread, [0, 1], [item.yInit * 0.6, item.yInit + item.yDrift]),
+                  rotate: item.rot,
+                  opacity: useTransform(fragmentsSpread, [0, 0.4, 0.85], [0.35, 0.65, 0.15]),
+                  scale: useTransform(fragmentsSpread, [0, 1], [1, 0.88]),
                 }}
+                className="absolute z-10 px-3 py-2 rounded-sm border border-white/15 bg-white/5 backdrop-blur-xs font-mono text-[11px] text-white/60 max-w-[200px] pointer-events-none select-none"
               >
-                {p.text}
-              </div>
-            ))}
+                {item.text}
+              </motion.div>
+            );
+          })}
 
-            {/* Annotation */}
-            <div
-              className="absolute text-[9px] font-mono text-[#F62440] uppercase tracking-widest transition-all duration-700"
-              style={{
-                top:     "24%",
-                left:    "35%",
-                whiteSpace: "nowrap",
-                opacity:        visible ? 1 : 0,
-                transitionDelay: "720ms",
-              }}
-              aria-hidden="true"
-            >
-              ↓ a signal — but which one?
-            </div>
-          </div>
-
-          {/* ── Right: copy ── */}
-          <div
-            className="space-y-6 transition-all duration-1000"
-            style={{
-              opacity:   visible ? 1 : 0,
-              transform: visible ? "translateX(0)" : "translateX(32px)",
-              transitionDelay: "200ms",
-            }}
+          {/* The true signal card that cuts through the noise */}
+          <motion.div
+            style={{ scale: callHighlightScale }}
+            className="relative z-20 w-full max-w-md bg-[#1f1f1f] border-2 border-[#F62440] rounded-sm p-5 shadow-[0_0_50px_rgba(246,36,64,0.25)] font-mono"
           >
-            <LedgerMark time="THE PROBLEM" />
-            <h2 id="problem-heading" className="text-4xl md:text-5xl font-bold tracking-tight text-[#FFFAF3] leading-tight">
-              The call lands.<br />
-              Then it&apos;s gone.
-            </h2>
-            <div className="space-y-4 text-[#78716C] font-sans leading-relaxed">
-              <p>
-                Creators post trade calls across X and other sources in real
-                time. The important details — asset, direction, entry — are
-                buried in prose, mixed with market commentary, replies, and noise.
-              </p>
-              <p>
-                By the time you find the call, the context has shifted. And
-                there&apos;s no record of what was said, when, or what happened after.
-              </p>
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#F62440] animate-ping" />
+                <span className="font-bold text-[#FFFAF3]">@ThorneMacro</span>
+                <span className="text-[10px] text-white/40">on X · 4h ago</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-xs bg-[#F62440]/20 text-[#F62440] border border-[#F62440]/40 font-bold">
+                SIGNAL LOCATED
+              </span>
             </div>
-          </div>
+
+            <p className="text-sm font-sans text-white/90 leading-relaxed mt-3.5">
+              &quot;$SOL expansion underway. Entered at <strong className="font-mono text-white underline decoration-[#F62440]">$174.50</strong>. 4H close above $178 confirms continuation. SL set tight at $162.&quot;
+            </p>
+
+            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[10px] text-white/50">
+              <span>HOW DO YOU PROVE THIS WAS POSTED BEFORE THE PUMP?</span>
+              <span className="text-[#FFE5BF] font-bold">→ WITH CALL LEDGER</span>
+            </div>
+          </motion.div>
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// C. STRUCTURE — sticky scroll-driven signal build-up
+// C. STRUCTURE — "From post to signal" (STICKY SCROLL-JACKED PROGRESSION)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const SIGNAL_STEPS = [
+const STRUCTURE_STAGES = [
   {
-    id: "step-source",
-    label: "SOURCE",
-    content: (
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="w-6 h-6 rounded-full bg-[#E8DFD1] flex items-center justify-center text-[9px] font-bold text-[#78716C]">AT</div>
-        <span className="font-bold text-[#171717]">Alex Thorne</span>
-        <span className="text-[#78716C] text-[10px]">@ThorneMacro</span>
-        <span className="text-[9px] font-mono px-1.5 py-0.5 bg-[#FFF2DB] border border-[#E8DFD1] text-[#78716C] rounded-sm">X</span>
-      </div>
-    ),
+    step: 1,
+    label: "SOURCE IDENTITY",
+    detail: "Creator handle, profile verification, and origin URL verified.",
+    value: "@ThorneMacro (Alex Thorne) · Source: X",
+    tag: "VERIFIED ORIGIN",
   },
   {
-    id: "step-asset",
-    label: "ASSET",
-    content: (
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-bold font-mono text-[#171717] text-base">SOL / USDC</span>
-        <span className="text-[9px] font-mono px-2 py-0.5 bg-[#16A34A]/10 border border-[#16A34A]/30 text-[#16A34A] rounded-sm font-bold">▲ LONG</span>
-      </div>
-    ),
+    step: 2,
+    label: "ASSET & DIRECTION",
+    detail: "Extracted contract symbol and directional sentiment.",
+    value: "SOL / USDC · ▲ BUY / LONG",
+    tag: "HIGH CONVICTION",
   },
   {
-    id: "step-entry",
-    label: "ENTRY",
-    content: (
-      <div className="font-mono text-sm text-[#171717] flex flex-wrap items-center gap-2">
-        <span className="text-[#78716C] text-[10px] uppercase tracking-wider">Entry target</span>
-        <span className="font-bold">$174.50</span>
-        <span className="text-[#78716C]">·</span>
-        <span className="text-[#78716C] text-[10px] uppercase tracking-wider">Timeframe</span>
-        <span className="font-bold">4H</span>
-      </div>
-    ),
+    step: 3,
+    label: "TRADE PARAMETERS",
+    detail: "Explicit entry targets, invalidation stop, and timeframe parsed.",
+    value: "Entry: $174.50 · Target: $215.00 · SL: $162.00 (4H)",
+    tag: "R:R 1:3.2",
   },
   {
-    id: "step-ts",
-    label: "TIMESTAMP",
-    content: (
-      <div className="font-mono text-sm text-[#171717] flex flex-wrap items-center gap-2">
-        <span className="text-[#78716C] text-[10px]">Captured</span>
-        <span>2026-11-05 · 20:15 UTC</span>
-        <a
-          href="#"
-          className="text-[9px] text-[#78716C] hover:text-[#171717] inline-flex items-center gap-0.5 transition"
-          aria-label="View original post (illustrative)"
-          onClick={(e) => e.preventDefault()}
-        >
-          ORIGINAL POST <ExternalLink className="w-2.5 h-2.5" />
-        </a>
-      </div>
-    ),
+    step: 4,
+    label: "TIMESTAMP ANCHOR",
+    detail: "Canonical creation block time cryptographically logged.",
+    value: "2026-11-05T20:15:00Z · Block #28,941,029",
+    tag: "IMMUTABLE TIME",
   },
   {
-    id: "step-verify",
-    label: "ARKIV",
-    content: (
-      <div className="flex items-center gap-2 font-mono">
-        <ShieldCheck className="w-4 h-4 text-[#16A34A]" aria-hidden="true" />
-        <span className="text-[#16A34A] font-bold text-[11px]">ARKIV-VERIFIED</span>
-        <span className="text-[#78716C] text-[10px]">ark-sig-99201-sol</span>
-      </div>
-    ),
+    step: 5,
+    label: "ARKIV ATTESTATION",
+    detail: "On-chain proof receipt published to Arkiv storage.",
+    value: "Receipt: ark-sig-99201-sol (0x892a...c1)",
+    tag: "ANCHORED PROOF",
   },
 ];
 
 function StructureSection() {
-  // Scroll-driven: the sticky container drives "how many rows are revealed"
-  const stickyContainerRef = useRef<HTMLDivElement>(null);
-  const progress = useScrollProgress(stickyContainerRef as React.RefObject<HTMLElement>);
-  // Also trigger the raw-post reveal on enter
-  const { ref: sectionRef, visible } = useReveal(0.05);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"],
+  });
 
-  // Map scroll progress → number of revealed rows
-  // We want rows to appear across 20–90% of section scroll
-  const normalised = Math.max(0, Math.min(1, (progress - 0.15) / 0.7));
-  const revealedCount = isReducedMotion()
-    ? SIGNAL_STEPS.length
-    : Math.min(SIGNAL_STEPS.length, Math.ceil(normalised * (SIGNAL_STEPS.length + 0.5)));
+  // Map the scroll progress into active step index (0 to 4)
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    return scrollYProgress.on("change", (latest) => {
+      // 5 steps across 0.1 to 0.9 range
+      if (latest < 0.2) setActiveStep(0);
+      else if (latest < 0.38) setActiveStep(1);
+      else if (latest < 0.56) setActiveStep(2);
+      else if (latest < 0.74) setActiveStep(3);
+      else setActiveStep(4);
+    });
+  }, [scrollYProgress]);
 
   return (
-    <section
-      ref={sectionRef as React.RefObject<HTMLElement>}
-      className="relative py-28 md:py-36"
-      aria-labelledby="structure-heading"
-    >
-      <div
-        ref={stickyContainerRef}
-        className="max-w-7xl mx-auto px-6 md:px-12 lg:px-16 grid grid-cols-1 lg:grid-cols-2 gap-16 items-start"
-      >
-        {/* ── Left: sticky copy ── */}
-        <div className="space-y-6 lg:sticky lg:top-24">
-          <LedgerMark time="FROM POST TO SIGNAL" />
-          <h2 id="structure-heading" className="text-4xl md:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
-            Structure<br />from the noise.
-          </h2>
-          <div className="space-y-4 text-[#78716C] font-sans leading-relaxed max-w-md">
-            <p>
-              When a creator posts a trade call, CallLedger parses the
-              text — identifying asset, direction, entry levels, and
-              timeframe where stated — and stores it as a structured signal
-              with its source and timestamp.
-            </p>
-            <p>
-              The signal is linked back to the original post. Nothing is
-              invented. The source is always visible.
-            </p>
-          </div>
-          <p className="text-[10px] font-mono text-[#78716C] border border-[#E8DFD1] rounded-sm px-3 py-2 bg-[#FFF2DB]/40 leading-relaxed">
-            ⓘ&nbsp; The signal card below shows illustrative sample data,
-            not live platform results.
-          </p>
-        </div>
+    // Tall container (280vh) so user scrolls through while inner content stays pinned!
+    <div ref={containerRef} className="relative h-[280vh] bg-[#FFFAF3]">
+      {/* Sticky viewport frame pinned in center */}
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden px-6 md:px-12 lg:px-16">
+        <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+          {/* Left Column: Narrative & Progress Gauge */}
+          <div className="lg:col-span-5 space-y-6">
+            <SectionStamp code="02 // STRUCTURING" label="FROM POST TO SIGNAL" />
 
-        {/* ── Right: progressive signal card ── */}
-        <div className="space-y-4">
-          {/* Raw post */}
-          <div
-            className="border border-[#E8DFD1] bg-[#FFF2DB]/50 rounded-sm p-4 font-mono text-xs transition-all duration-700"
-            style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(16px)" }}
-          >
-            <div className="text-[10px] text-[#78716C] mb-2 uppercase tracking-widest">// RAW POST</div>
-            <p className="text-[#171717] leading-relaxed italic">
-              &quot;$SOL breakout confirmed — entered at $174. 4H close above $178
-              needed to hold the structure. Watching for continuation into
-              $215 range. SL below $162. High conviction.&quot;
-            </p>
-            <div className="mt-2 text-[9px] text-[#78716C]">@ThorneMacro · X · 2026-11-05</div>
-          </div>
-
-          {/* Arrow */}
-          <div
-            className="text-center text-[#E8DFD1] text-xl transition-all duration-500"
-            style={{ opacity: visible ? 1 : 0, transitionDelay: "300ms" }}
-            aria-hidden="true"
-          >
-            ↓
-          </div>
-
-          {/* Structured signal card, rows revealed by scroll */}
-          <div className="border border-[#171717] rounded-sm overflow-hidden">
-            <div className="bg-[#171717] px-4 py-2 text-[9px] font-mono text-[#FFFAF3]/60 uppercase tracking-widest flex items-center justify-between">
-              <span>// STRUCTURED SIGNAL</span>
-              <span className="text-[#F62440]">SAMPLE DATA</span>
+            <div className="space-y-3">
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
+                Scroll to structure
+                <br />
+                the signal.
+              </h2>
+              <p className="text-sm text-[#78716C] font-sans leading-relaxed">
+                As you scroll, CallLedger pulls raw prose through the structuring
+                pipeline. Every layer is extracted, verified, and anchored before
+                becoming an actionable signal.
+              </p>
             </div>
-            <div className="divide-y divide-[#E8DFD1]">
-              {SIGNAL_STEPS.map((step, i) => (
-                <div
-                  key={step.id}
-                  className="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 transition-all duration-500 ease-out"
-                  style={{
-                    opacity:   i < revealedCount ? 1 : 0,
-                    transform: i < revealedCount ? "translateX(0)" : "translateX(12px)",
-                    transitionDelay: `${i * 60}ms`,
-                  }}
-                >
-                  <span className="text-[9px] font-mono uppercase tracking-widest text-[#78716C] w-20 shrink-0">
-                    {step.label}
-                  </span>
-                  <div className="min-w-0">{step.content}</div>
+
+            {/* Scroll Progress Meter */}
+            <div className="p-4 rounded-sm border border-[#E8DFD1] bg-[#FFF2DB]/80 space-y-2 font-mono text-xs">
+              <div className="flex items-center justify-between text-[11px] font-bold text-[#171717]">
+                <span>STAGE {activeStep + 1} OF 5</span>
+                <span>{Math.round(((activeStep + 1) / 5) * 100)}% COMPLETE</span>
+              </div>
+              <div className="w-full h-1.5 bg-[#E8DFD1] rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-[#F62440]"
+                  animate={{ width: `${((activeStep + 1) / 5) * 100}%` }}
+                  transition={{ duration: 0.25 }}
+                />
+              </div>
+              <p className="text-[10px] text-[#78716C] italic pt-1">
+                Keep scrolling down to reveal all parameters...
+              </p>
+            </div>
+          </div>
+
+          {/* Right Column: Interactive Step-by-Step Card Builder */}
+          <div className="lg:col-span-7">
+            <div className="border-2 border-[#171717] rounded-sm bg-[#FFFAF3] shadow-xl overflow-hidden font-mono">
+              <div className="bg-[#171717] px-5 py-3 flex items-center justify-between text-xs text-[#FFFAF3]">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#F62440]" />
+                  <span className="font-bold tracking-wider">// STRUCTURED SIGNAL SPEC</span>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+                <span className="text-[10px] text-[#FFE5BF] border border-[#FFE5BF]/30 px-2 py-0.5 rounded-xs">
+                  STAGE {activeStep + 1} ACTIVE
+                </span>
+              </div>
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// D. FOLLOW — scroll-driven timeline: line grows, dots appear one by one
-// ═══════════════════════════════════════════════════════════════════════════════
+              <div className="divide-y divide-[#E8DFD1] p-2 sm:p-4 space-y-2">
+                {STRUCTURE_STAGES.map((stage, idx) => {
+                  const isRevealed = idx <= activeStep;
+                  const isCurrent = idx === activeStep;
 
-type TimelineStatus = "ACTIVE" | "WATCHING" | "CLOSED";
-
-interface TimelineEvent {
-  ts: string;
-  label: string;
-  note: string;
-  status: TimelineStatus;
-  price: string;
-}
-
-const TIMELINE: TimelineEvent[] = [
-  { ts: "Nov 05 · 20:15", label: "Signal captured",          note: "Entry target $174.50 · 4H",   status: "ACTIVE",   price: "$174.50" },
-  { ts: "Nov 06 · 04:30", label: "Price crossed entry",      note: "Spot reached $176.80",         status: "WATCHING", price: "$176.80" },
-  { ts: "Nov 06 · 14:00", label: "4H candle close above $178", note: "Structure confirmed",        status: "WATCHING", price: "$179.20" },
-  { ts: "Nov 07 · 09:00", label: "Signal closed",            note: "Price at $188.40 · +7.9%",    status: "CLOSED",   price: "$188.40" },
-];
-
-const DOT_COLOR: Record<TimelineStatus, string> = {
-  ACTIVE:   "bg-[#F62440]",
-  WATCHING: "bg-[#FFE5BF] border-2 border-[#E8DFD1]",
-  CLOSED:   "bg-[#16A34A]",
-};
-
-function FollowSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const progress   = useScrollProgress(sectionRef);
-  const { ref: revealRef, visible } = useReveal(0.1);
-
-  const setRef = useCallback(
-    (el: HTMLElement | null) => {
-      (sectionRef as React.MutableRefObject<HTMLElement | null>).current = el;
-      (revealRef as React.MutableRefObject<HTMLElement | null>).current = el;
-    },
-    [revealRef]
-  );
-
-  // Normalise progress so the timeline plays from 20%–80% of section scroll
-  const norm = Math.max(0, Math.min(1, (progress - 0.18) / 0.6));
-  const lineHeight = isReducedMotion() ? 100 : Math.round(norm * 100); // %
-  const visibleDots = isReducedMotion()
-    ? TIMELINE.length
-    : Math.floor(norm * (TIMELINE.length + 0.5));
-
-  return (
-    <section
-      ref={setRef}
-      className="relative py-28 md:py-36 bg-[#FFF2DB]/40"
-      aria-labelledby="follow-heading"
-    >
-      <div className="max-w-7xl mx-auto px-6 md:px-12 lg:px-16 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-
-        {/* ── Left: scroll-driven timeline ── */}
-        <div
-          className="transition-opacity duration-700"
-          style={{ opacity: visible ? 1 : 0 }}
-          aria-label="Illustrative signal timeline showing state changes (sample data)"
-          role="img"
-        >
-          <div className="text-[9px] font-mono text-[#78716C] uppercase tracking-widest pb-3 mb-1 border-b border-[#E8DFD1] flex items-center gap-2">
-            <span className="w-1 h-1 rounded-full bg-[#16A34A] animate-pulse" aria-hidden="true" />
-            // SIGNAL LEDGER · SOL/USDC ·{" "}
-            <span className="text-[#F62440]">SAMPLE DATA</span>
-          </div>
-
-          {/* Timeline wrapper — fixed geometry so dot+line stay perfectly aligned */}
-          <div className="relative ml-3 mt-4">
-            {/* Growing vertical line — starts at top-0 and extends downward */}
-            <div
-              className="absolute left-[5px] top-0 w-0.5 bg-[#E8DFD1] transition-none origin-top"
-              style={{
-                height: `${lineHeight}%`,
-                transition: "height 0.6s cubic-bezier(0.4,0,0.2,1)",
-              }}
-              aria-hidden="true"
-            />
-
-            {TIMELINE.map((event, i) => {
-              const dotVisible = i < visibleDots;
-              const isLast = i === TIMELINE.length - 1;
-
-              return (
-                <div
-                  key={i}
-                  className="relative flex gap-5 pb-8"
-                  style={{ minHeight: isLast ? undefined : "80px" }}
-                >
-                  {/* Dot — perfectly aligned on the line */}
-                  <div className="relative shrink-0 w-3 flex justify-center">
-                    <div
-                      className={`w-3 h-3 rounded-full mt-0.5 transition-all duration-500 ${DOT_COLOR[event.status]}`}
-                      style={{
-                        opacity:         dotVisible ? 1 : 0,
-                        transform:       dotVisible ? "scale(1)" : "scale(0.4)",
-                        transitionDelay: `${i * 120}ms`,
+                  return (
+                    <motion.div
+                      key={stage.step}
+                      initial={false}
+                      animate={{
+                        opacity: isRevealed ? 1 : 0.2,
+                        x: isRevealed ? 0 : 15,
+                        backgroundColor: isCurrent ? "#FFF2DB" : "#FFFAF3",
                       }}
-                      aria-hidden="true"
-                    />
-                  </div>
-
-                  {/* Content */}
-                  <div
-                    className="flex-1 transition-all duration-600 ease-out"
-                    style={{
-                      opacity:         dotVisible ? 1 : 0,
-                      transform:       dotVisible ? "translateX(0)" : "translateX(10px)",
-                      transitionDelay: `${i * 120 + 60}ms`,
-                    }}
-                  >
-                    <div className="text-[9px] font-mono text-[#78716C] uppercase tracking-wider mb-1">{event.ts}</div>
-                    <div className="text-sm font-bold text-[#171717] mb-0.5">{event.label}</div>
-                    <div className="text-xs text-[#78716C] font-sans mb-2">{event.note}</div>
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded-sm border inline-block ${
-                        event.status === "CLOSED"
-                          ? "bg-[#16A34A]/10 border-[#16A34A]/30 text-[#16A34A] font-bold"
-                          : "bg-[#FFFAF3] border-[#E8DFD1] text-[#78716C]"
+                      transition={{ duration: 0.35, ease: "easeOut" }}
+                      className={`p-3.5 rounded-sm transition-all border ${
+                        isCurrent
+                          ? "border-[#171717] shadow-sm"
+                          : isRevealed
+                            ? "border-transparent"
+                            : "border-transparent"
                       }`}
                     >
-                      {event.price}{event.status === "CLOSED" && " ✓"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      <div className="flex items-center justify-between text-[10px] pb-1">
+                        <span className="text-[#78716C] uppercase font-bold tracking-wider">
+                          0{stage.step} — {stage.label}
+                        </span>
+                        {isRevealed && (
+                          <span className="text-[9px] px-1.5 py-px rounded-xs bg-[#16A34A]/10 text-[#16A34A] border border-[#16A34A]/30 font-bold flex items-center gap-1">
+                            <Check className="w-2.5 h-2.5" /> {stage.tag}
+                          </span>
+                        )}
+                      </div>
 
-          <p className="text-[10px] font-mono text-[#78716C]/50 mt-2 ml-8">
-            All values above are illustrative and do not represent actual trades.
-          </p>
-        </div>
+                      <div className="text-xs sm:text-sm font-bold text-[#171717] pt-0.5">
+                        {isRevealed ? (
+                          stage.value
+                        ) : (
+                          <span className="text-[#78716C]/40">Awaiting scroll advance...</span>
+                        )}
+                      </div>
 
-        {/* ── Right: copy ── */}
-        <div
-          className="space-y-6 transition-all duration-1000"
-          style={{
-            opacity:   visible ? 1 : 0,
-            transform: visible ? "translateX(0)" : "translateX(32px)",
-            transitionDelay: "200ms",
-          }}
-        >
-          <LedgerMark time="WHAT HAPPENED NEXT" />
-          <h2 id="follow-heading" className="text-4xl md:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
-            Follow the call.<br />
-            Review the record.
-          </h2>
-          <div className="space-y-4 text-[#78716C] font-sans leading-relaxed max-w-md">
-            <p>
-              When you follow a creator, CallLedger monitors their posts and
-              surfaces new signals as they appear. Each signal has its own
-              timeline — showing when it was captured, how the market moved,
-              and when the signal was resolved.
-            </p>
-            <p>
-              Past calls stay in the ledger. You can review a creator&apos;s
-              signal history to understand their style before deciding to
-              act on future calls.
-            </p>
-            <p className="font-mono text-xs text-[#171717] border-l-2 border-[#F62440] pl-3">
-              Tracking makes past calls reviewable. It does not predict future outcomes.
-            </p>
+                      {isRevealed && (
+                        <p className="text-[11px] font-sans text-[#78716C] pt-1">
+                          {stage.detail}
+                        </p>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// E. DECIDE — card params stagger in, button pulses
+// D. FOLLOW — "See what happened next" (STICKY TIMELINE LOCK)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const TRADE_PARAMS = [
-  { label: "Chain",      value: "Base" },
-  { label: "Order type", value: "LIMIT (Flash)" },
-  { label: "Spend",      value: "0.05 USDC" },
-  { label: "Limit",      value: "$2,400" },
+const TIMELINE_STAGES = [
+  {
+    step: 1,
+    time: "NOV 05 · 20:15 UTC",
+    title: "SIGNAL CAPTURED & ANCHORED",
+    desc: "Post captured on X and anchored on Arkiv at block #28,941,029. Target entry $174.50.",
+    price: "$174.50 SPOT",
+    badge: "OPEN",
+    badgeColor: "bg-[#F62440] text-white",
+  },
+  {
+    step: 2,
+    time: "NOV 06 · 04:30 UTC",
+    title: "ENTRY TARGET FILLED",
+    desc: "Asset touched designated entry zone. Real-time webhook notification dispatched to followers.",
+    price: "$174.50 REACHED",
+    badge: "ACTIVE",
+    badgeColor: "bg-[#171717] text-[#FFFAF3]",
+  },
+  {
+    step: 3,
+    time: "NOV 06 · 14:00 UTC",
+    title: "CONTINUATION CONFIRMED",
+    desc: "4H candle closed at $179.20. Market confirms the creator's structural thesis.",
+    price: "$179.20 (+2.7%)",
+    badge: "IN PROFIT",
+    badgeColor: "bg-[#16A34A]/20 text-[#16A34A] border border-[#16A34A]/40",
+  },
+  {
+    step: 4,
+    time: "NOV 07 · 09:00 UTC",
+    title: "TAKE PROFIT TARGET EXECUTED",
+    desc: "Trade completed at $188.40. Outcome ledger finalized with cryptographically proven history.",
+    price: "$188.40 (+7.9%)",
+    badge: "RESOLVED",
+    badgeColor: "bg-[#16A34A] text-white",
+  },
 ];
 
+function FollowSection() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start start", "end end"],
+  });
+
+  // Calculate line height percentage smoothly
+  const lineHeight = useTransform(scrollYProgress, [0.08, 0.88], ["0%", "100%"]);
+  const smoothLineHeight = useSpring(lineHeight, { stiffness: 120, damping: 25 });
+
+  const [activeCount, setActiveCount] = useState(1);
+
+  useEffect(() => {
+    return scrollYProgress.on("change", (latest) => {
+      if (latest < 0.22) setActiveCount(1);
+      else if (latest < 0.45) setActiveCount(2);
+      else if (latest < 0.68) setActiveCount(3);
+      else setActiveCount(4);
+    });
+  }, [scrollYProgress]);
+
+  return (
+    // Tall container (280vh) so the page pauses scroll and stays centered!
+    <div ref={containerRef} className="relative h-[280vh] bg-[#FFF2DB]/50">
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden px-6 md:px-12 lg:px-16">
+        <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+          {/* Left Narrative */}
+          <div className="lg:col-span-5 space-y-6">
+            <SectionStamp code="03 // OUTCOME LEDGER" label="TIMELINE TRACKING" />
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
+              The timeline locks.
+              <br />
+              <span className="text-[#16A34A]">You scroll through history.</span>
+            </h2>
+            <p className="text-sm text-[#78716C] font-sans leading-relaxed">
+              The page stays centered here until all 4 timeline checkpoints are
+              unlocked. Watch how CallLedger tracks price movements and verifies
+              whether the call actually delivered or failed.
+            </p>
+            <div className="p-3.5 border border-[#E8DFD1] bg-[#FFFAF3] rounded-sm font-mono text-xs text-[#171717] flex items-center justify-between">
+              <span>UNLOCKED NODES: {activeCount} / 4</span>
+              <span className="text-[#16A34A] font-bold">
+                {activeCount === 4 ? "ALL NODES VERIFIED" : "SCROLL DOWN TO PROGRESS"}
+              </span>
+            </div>
+          </div>
+
+          {/* Right Centered Interactive Timeline */}
+          <div className="lg:col-span-7">
+            <div className="relative pl-8 sm:pl-10 font-mono">
+              {/* Background static track */}
+              <div className="absolute left-[13px] sm:left-[17px] top-2 bottom-6 w-1 bg-[#E8DFD1] rounded-full" />
+
+              {/* Dynamic growing line */}
+              <motion.div
+                style={{ height: smoothLineHeight }}
+                className="absolute left-[13px] sm:left-[17px] top-2 w-1 bg-[#16A34A] rounded-full origin-top shadow-[0_0_10px_rgba(22,163,74,0.4)]"
+              />
+
+              <div className="space-y-6 sm:space-y-8">
+                {TIMELINE_STAGES.map((event, idx) => {
+                  const isReached = idx < activeCount;
+
+                  return (
+                    <div key={event.step} className="relative flex items-start gap-4 sm:gap-6">
+                      {/* Node Bullet */}
+                      <motion.div
+                        animate={{
+                          scale: isReached ? [1, 1.3, 1] : 0.8,
+                          backgroundColor: isReached ? "#16A34A" : "#E8DFD1",
+                          borderColor: isReached ? "#FFFAF3" : "#E8DFD1",
+                        }}
+                        transition={{ duration: 0.3 }}
+                        className="absolute -left-[27px] sm:-left-[31px] top-1.5 w-6 h-6 rounded-full border-4 border-[#FFFAF3] flex items-center justify-center text-[9px] font-bold text-white shadow-xs z-10"
+                      >
+                        {isReached && <Check className="w-3 h-3 stroke-[3]" />}
+                      </motion.div>
+
+                      {/* Event Box */}
+                      <motion.div
+                        animate={{
+                          opacity: isReached ? 1 : 0.25,
+                          x: isReached ? 0 : 16,
+                          backgroundColor: isReached ? "#FFFAF3" : "#FFF8ED",
+                        }}
+                        transition={{ duration: 0.4 }}
+                        className={`flex-1 p-3.5 sm:p-4 rounded-sm border transition-all ${
+                          isReached ? "border-[#171717] shadow-sm" : "border-[#E8DFD1]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[10px] pb-1">
+                          <span className="text-[#78716C] font-bold">{event.time}</span>
+                          <span className={`px-2 py-0.5 rounded-xs font-bold text-[9px] ${event.badgeColor}`}>
+                            {event.badge}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs sm:text-sm font-bold text-[#171717] mt-0.5">
+                          {event.title}
+                        </h4>
+
+                        <p className="text-[11px] font-sans text-[#78716C] leading-snug mt-1">
+                          {event.desc}
+                        </p>
+
+                        <div className="mt-2.5 pt-2 border-t border-[#E8DFD1]/70 flex items-center justify-between text-[10px]">
+                          <span className="text-[#78716C]">PRICE AT LOG:</span>
+                          <span className="font-bold text-[#171717]">{event.price}</span>
+                        </div>
+                      </motion.div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// E. DECIDE — "Your call, your execution" (Scramble Text & Interactive Tilt)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function DecideSection() {
-  const { ref, visible } = useReveal(0.1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) setInView(true);
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section
-      ref={ref as React.RefObject<HTMLElement>}
-      className="relative py-28 md:py-36 overflow-hidden"
+      ref={containerRef}
+      className="relative py-28 md:py-36 bg-[#FFFAF3] overflow-hidden"
       aria-labelledby="decide-heading"
     >
-      {/* Subtle warm strip on right */}
-      <div className="absolute inset-y-0 right-0 w-1/2 bg-[#FFF2DB]/30 hidden lg:block" aria-hidden="true" />
+      <div className="max-w-7xl mx-auto px-6 md:px-12 lg:px-16 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+        {/* Left Column: Cipher text & Actions */}
+        <div className="lg:col-span-6 space-y-6">
+          <SectionStamp code="04 // USER SOVEREIGNTY" label="YOUR CALL" />
 
-      <div className="relative max-w-7xl mx-auto px-6 md:px-12 lg:px-16 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-
-        {/* ── Left: copy + stagger ── */}
-        <div
-          className="space-y-6 transition-all duration-1000"
-          style={{
-            opacity:   visible ? 1 : 0,
-            transform: visible ? "translateX(0)" : "translateX(-32px)",
-          }}
-        >
-          <LedgerMark time="YOUR CALL" />
-          <h2 id="decide-heading" className="text-4xl md:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
-            You decide<br />what to do next.
-          </h2>
-          <div className="space-y-4 text-[#78716C] font-sans leading-relaxed max-w-md">
-            <p>
-              Seeing a signal is not a trade. CallLedger shows you the call,
-              the source, and the context. What you do with it is your decision.
-            </p>
-            <p>
-              If you want to act, there is an optional path to review and
-              execute an order through{" "}
-              <strong className="font-mono text-[#171717]">Definitive Flash</strong>
-              {" "}— a connected non-custodial execution layer. You review every
-              parameter before anything is submitted. Your wallet, your
-              signature, your choice.
+          <div className="space-y-3">
+            <h2 id="decide-heading" className="text-4xl sm:text-5xl font-bold tracking-tight text-[#171717] leading-tight">
+              <ScrambleText
+                text="You decide what to do next."
+                trigger={inView}
+              />
+            </h2>
+            <p className="text-sm sm:text-base text-[#78716C] font-sans leading-relaxed">
+              Tracking a signal does not force a trade. CallLedger gives you
+              complete source transparency. If you choose to act, an optional
+              non-custodial route lets you review and sign orders via Definitive Flash.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
+
+          <div className="pt-2 flex flex-wrap gap-4 items-center">
+            {/* Open CallLedger with interactive color inversion */}
             <CtaButton variant="dark" label="Open CallLedger" />
-            <Link
-              href="/trade"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-sm text-sm font-mono tracking-wider border border-[#E8DFD1] text-[#78716C] hover:border-[#171717] hover:text-[#171717] transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#171717]"
-            >
-              See trade review flow
-              <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-            </Link>
+
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Link
+                href="/trade"
+                className="group inline-flex items-center gap-2 px-5 py-3 rounded-sm text-xs font-mono font-bold tracking-wider border border-[#E8DFD1] bg-[#FFF2DB] text-[#171717] hover:bg-[#171717] hover:text-[#FFFAF3] hover:border-[#171717] transition-all duration-300"
+              >
+                <span>Inspect Trade Review Flow</span>
+                <ExternalLink className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+              </Link>
+            </motion.div>
           </div>
         </div>
 
-        {/* ── Right: trade review card with staggered params ── */}
-        <div
-          aria-label="Sample trade review interface (illustrative)"
-          role="img"
-          className="transition-all duration-1000"
-          style={{
-            opacity:         visible ? 1 : 0,
-            transform:       visible ? "translateX(0)" : "translateX(32px)",
-            transitionDelay: "200ms",
-          }}
-        >
-          <div className="border border-[#E8DFD1] rounded-sm overflow-hidden max-w-md shadow-sm">
-            {/* Card header */}
-            <div className="bg-[#171717] px-4 py-2.5 flex items-center justify-between">
-              <span className="text-[10px] font-mono text-white/60 uppercase tracking-widest">// TRADE REVIEW</span>
-              <span className="text-[9px] font-mono text-[#F62440] border border-[#F62440]/30 px-1.5 py-0.5 rounded-sm">SAMPLE</span>
+        {/* Right Column: 3D interactive floating card */}
+        <div className="lg:col-span-6 flex justify-center">
+          <motion.div
+            whileHover={{ y: -8, rotateX: 3, rotateY: -3, scale: 1.015 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            className="w-full max-w-md border-2 border-[#171717] bg-[#FFFAF3] rounded-sm shadow-xl p-6 font-mono space-y-5"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#E8DFD1]">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
+                <span className="font-bold text-xs text-[#171717]">// DEFINITIVE FLASH VAULT</span>
+              </div>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-xs bg-[#FFF2DB] border border-[#E8DFD1] text-[#78716C]">
+                NON-CUSTODIAL
+              </span>
             </div>
 
-            <div className="p-5 space-y-5 bg-[#FFFAF3]">
-              {/* Signal source ref */}
-              <div
-                className="p-3 bg-[#FFF2DB]/60 border border-[#E8DFD1] rounded-sm space-y-1 transition-all duration-600"
-                style={{
-                  opacity:         visible ? 1 : 0,
-                  transform:       visible ? "translateY(0)" : "translateY(8px)",
-                  transitionDelay: "300ms",
-                }}
-              >
-                <div className="text-[9px] font-mono text-[#78716C] uppercase tracking-widest">Signal Source</div>
-                <div className="text-sm font-bold text-[#171717] font-mono">SOL/USDC · ▲ LONG</div>
-                <div className="text-[10px] text-[#78716C]">@ThorneMacro · X · captured Nov 05</div>
-              </div>
+            <div className="p-3 bg-[#FFF2DB]/80 border border-[#E8DFD1] rounded-sm space-y-1 text-xs">
+              <span className="text-[9px] text-[#78716C] uppercase font-bold">Signal Source</span>
+              <div className="font-bold text-[#171717]">SOL/USDC · 4H LONG</div>
+              <div className="text-[10px] text-[#78716C]">@ThorneMacro · Verified on-chain</div>
+            </div>
 
-              {/* Params — each staggered */}
-              <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                {TRADE_PARAMS.map(({ label, value }, i) => (
-                  <div
-                    key={label}
-                    className="border border-[#E8DFD1] rounded-sm p-2.5 bg-white transition-all duration-500 ease-out"
-                    style={{
-                      opacity:         visible ? 1 : 0,
-                      transform:       visible ? "translateY(0)" : "translateY(10px)",
-                      transitionDelay: `${400 + i * 80}ms`,
-                    }}
-                  >
-                    <div className="text-[9px] text-[#78716C] uppercase tracking-wider mb-0.5">{label}</div>
-                    <div className="font-bold text-[#171717]">{value}</div>
-                  </div>
-                ))}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-2.5 rounded-sm border border-[#E8DFD1]">
+                <div className="text-[9px] text-[#78716C] uppercase">EXECUTION CHAIN</div>
+                <div className="font-bold text-[#171717] mt-0.5">Base Mainnet</div>
               </div>
-
-              {/* CTA button — fades in last, has a subtle pulse ring */}
-              <div
-                className="border-t border-[#E8DFD1] pt-4 space-y-2 transition-all duration-600"
-                style={{
-                  opacity:         visible ? 1 : 0,
-                  transitionDelay: "740ms",
-                }}
-              >
-                <div className="relative">
-                  {/* Pulse ring */}
-                  <div
-                    className="absolute inset-0 rounded-sm bg-[#171717]/10 animate-ping"
-                    style={{ animationDuration: "2.4s", animationDelay: "1s" }}
-                    aria-hidden="true"
-                  />
-                  <button
-                    type="button"
-                    className="relative w-full py-2.5 bg-[#171717] text-[#FFFAF3] text-xs font-mono font-bold rounded-sm tracking-wider cursor-default select-none"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                  >
-                    ✓ CONFIRM &amp; SIGN WITH WALLET
-                  </button>
-                </div>
-                <p className="text-[9px] font-mono text-[#78716C] text-center leading-relaxed">
-                  Non-custodial. You sign every order. Your keys, your trade.
-                </p>
+              <div className="p-2.5 rounded-sm border border-[#E8DFD1]">
+                <div className="text-[9px] text-[#78716C] uppercase">ORDER STRATEGY</div>
+                <div className="font-bold text-[#171717] mt-0.5">Flash Limit</div>
               </div>
             </div>
-          </div>
+
+            <div className="pt-2">
+              <div className="w-full py-3 bg-[#171717] text-[#FFFAF3] text-xs font-bold rounded-sm tracking-wider text-center flex items-center justify-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#16A34A]" />
+                <span>CRYPTOGRAPHICALLY SIGN IN METAMASK</span>
+              </div>
+              <p className="text-[10px] text-[#78716C] text-center mt-2 font-sans">
+                No funds leave your wallet without your direct EIP-712 signature.
+              </p>
+            </div>
+          </motion.div>
         </div>
       </div>
     </section>
@@ -868,93 +833,98 @@ function DecideSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// F. CLOSING + FOOTER  — CTA fixed to white/cream on dark bg
+// F. CLOSING & FOOTER — Phrase Rotator & Blinking CallLedger
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const ROTATING_PHRASES = [
+  "Now so is the record.",
+  "Every signal verified on-chain.",
+  "From chaotic feed to clean execution.",
+  "Auditable history. Zero guesswork.",
+];
+
 function ClosingSection() {
-  const { ref, visible } = useReveal(0.1);
+  const [phraseIndex, setPhraseIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPhraseIndex((prev) => (prev + 1) % ROTATING_PHRASES.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
-    <footer className="bg-[#171717]" aria-labelledby="closing-heading">
-      {/* Closing hero */}
-      <div ref={ref as React.RefObject<HTMLDivElement>} className="relative py-32 md:py-40 overflow-hidden">
-        <div className="absolute inset-0 ledger-dot-grid opacity-10" aria-hidden="true" />
-        {/* Radial glow */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
-          <div className="w-[600px] h-[600px] rounded-full bg-[#F62440]/5 blur-3xl" />
+    <footer className="bg-[#171717] text-[#FFFAF3] overflow-hidden" aria-labelledby="closing-heading">
+      <div className="relative py-28 md:py-36 px-6 md:px-12 lg:px-16 text-center max-w-4xl mx-auto space-y-8">
+        <div className="absolute inset-0 ledger-dot-grid opacity-10 pointer-events-none" aria-hidden="true" />
+
+        {/* Blinking CallLedger Brand Badge */}
+        <div className="inline-flex items-center gap-2 border border-white/20 bg-white/5 px-3 py-1.5 rounded-full backdrop-blur-xs">
+          <span className="w-2 h-2 rounded-full bg-[#F62440] animate-ping" />
+          <span className="text-[11px] font-mono font-bold tracking-widest text-[#FFFAF3] uppercase">
+            CALL LEDGER PROTOCOL
+          </span>
         </div>
 
-        <div
-          className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 lg:px-16 text-center space-y-10 transition-all duration-1000"
-          style={{
-            opacity:   visible ? 1 : 0,
-            transform: visible ? "translateY(0)" : "translateY(32px)",
-          }}
-        >
-          <div className="flex items-baseline gap-1 justify-center" aria-hidden="true">
-            <span className="text-[11px] font-mono font-bold text-[#F62440] tracking-widest uppercase border border-[#F62440]/40 px-1.5 py-0.5 rounded-sm">CALL</span>
-            <span className="text-[11px] font-mono font-bold text-white tracking-widest uppercase border border-white/20 px-1.5 py-0.5 rounded-sm">LEDGER</span>
-          </div>
-
-          <h2
-            id="closing-heading"
-            className="text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tight text-[#FFFAF3] leading-tight"
-          >
-            The call is public.<br />
-            <span className="text-[#F62440]">Now so is the record.</span>
+        {/* Dynamic Rotating Headline */}
+        <div className="space-y-3">
+          <h2 id="closing-heading" className="text-4xl sm:text-6xl font-bold tracking-tight text-[#FFFAF3]">
+            The call is public.
+            <br />
+            <span className="inline-block min-h-[1.3em] text-[#F62440]">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={phraseIndex}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -16 }}
+                  transition={{ duration: 0.45 }}
+                  className="inline-block"
+                >
+                  {ROTATING_PHRASES[phraseIndex]}
+                </motion.span>
+              </AnimatePresence>
+            </span>
           </h2>
 
-          {/*
-            CTA on dark background: use "light" variant so it renders
-            as cream/white — not the invisible dark-on-dark "outline" of before.
-          */}
-          <CtaButton variant="light" label="Open CallLedger" />
+          <p className="text-sm sm:text-base text-white/60 font-sans max-w-xl mx-auto pt-2">
+            Never wonder whether a crypto influencer deleted a losing trade or claimed
+            a pump after the fact. Build your sovereign trading record today.
+          </p>
+        </div>
+
+        {/* Primary CTA (starts cream, flips to dark on hover) */}
+        <div className="pt-4">
+          <CtaButton variant="cream" label="Open CallLedger" />
         </div>
       </div>
 
-      {/* Footer nav */}
-      <nav className="border-t border-white/10 px-6 md:px-12 lg:px-16 py-10" aria-label="Footer navigation">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
-          <div className="space-y-1">
-            <div className="flex items-baseline gap-1">
-              <span className="text-[10px] font-mono font-bold text-[#F62440] tracking-widest uppercase border border-[#F62440]/40 px-1 py-px rounded-sm">CALL</span>
-              <span className="text-[10px] font-mono font-bold text-white tracking-widest uppercase border border-white/20 px-1 py-px rounded-sm">LEDGER</span>
-            </div>
-            <p className="text-[10px] font-mono text-white/30 max-w-xs leading-relaxed">
-              Trade call monitoring, signal structuring, and outcome tracking. Not investment advice.
-            </p>
+      {/* Footer Navigation Bar */}
+      <nav className="border-t border-white/10 px-6 md:px-12 lg:px-16 py-8" aria-label="Footer navigation">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-xs font-mono text-white/50">
+          <div className="flex items-center gap-2">
+            <span className="bg-[#F62440] text-white px-1.5 py-0.5 rounded-xs font-bold text-[10px]">
+              CALL
+            </span>
+            <span className="font-bold text-white tracking-wider">LEDGER</span>
+            <span className="text-white/30 ml-2">© {new Date().getFullYear()}</span>
           </div>
 
-          <div className="flex flex-wrap gap-x-8 gap-y-3 text-[11px] font-mono text-white/40 uppercase tracking-widest">
-            {[
-              { href: "/",           label: "Terminal"    },
-              { href: "/discover",   label: "Discover"    },
-              { href: "/following",  label: "Following"   },
-              { href: "/trade",      label: "Trade"       },
-              { href: "/strategies", label: "Allocations" },
-              { href: "/portfolio",  label: "Portfolio"   },
-            ].map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="hover:text-white transition-colors duration-150 focus-visible:outline-1 focus-visible:outline-white rounded-sm"
-              >
-                {label}
-              </Link>
-            ))}
+          <div className="flex flex-wrap items-center gap-6">
+            <Link href="/" className="hover:text-white transition">Terminal</Link>
+            <Link href="/discover" className="hover:text-white transition">Discover</Link>
+            <Link href="/following" className="hover:text-white transition">Following</Link>
+            <Link href="/trade" className="hover:text-white transition">Trade</Link>
+            <Link href="/strategies" className="hover:text-white transition">Allocations</Link>
+            <Link href="/portfolio" className="hover:text-white transition">Portfolio</Link>
           </div>
-        </div>
-        <div className="max-w-7xl mx-auto mt-8 pt-6 border-t border-white/5 text-[9px] font-mono text-white/20">
-          © {new Date().getFullYear()} CallLedger · Signal monitoring for public crypto trade calls · Not financial advice
         </div>
       </nav>
     </footer>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Sticky top nav
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Sticky Minimal Topbar ──────────────────────────────────────────────────
 
 function LandingNav() {
   const [scrolled, setScrolled] = useState(false);
@@ -968,69 +938,50 @@ function LandingNav() {
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? "bg-[#FFFAF3]/95 backdrop-blur-sm border-b border-[#E8DFD1] shadow-sm" : "bg-transparent"
+        scrolled ? "bg-[#FFFAF3]/95 backdrop-blur-md border-b border-[#E8DFD1] shadow-xs" : "bg-transparent"
       }`}
       role="banner"
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 lg:px-16 h-14 flex items-center justify-between">
         <Link
           href="/landing"
-          className="flex items-baseline gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#171717] rounded-sm"
+          className="flex items-center gap-1.5 focus-visible:outline-2 focus-visible:outline-[#171717] rounded-sm"
           aria-label="CallLedger home"
         >
-          <span className="text-[10px] font-mono font-bold text-[#F62440] tracking-widest uppercase border border-[#F62440]/40 px-1 py-px rounded-sm">CALL</span>
-          <span className="text-[10px] font-mono font-bold text-[#171717] tracking-widest uppercase border border-[#E8DFD1] px-1 py-px rounded-sm">LEDGER</span>
+          <span className="bg-[#F62440] text-white px-1.5 py-0.5 rounded-xs font-bold text-[10px] tracking-wider">
+            CALL
+          </span>
+          <span className="font-bold text-xs tracking-wider text-[#171717]">
+            LEDGER
+          </span>
         </Link>
 
         <Link
           href="/"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-sm bg-[#171717] text-[#FFFAF3] text-[11px] font-mono font-bold tracking-wider hover:bg-[#2a2a2a] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#171717]"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-[#171717] text-[#FFFAF3] text-[11px] font-mono font-bold tracking-wider hover:bg-[#2a2a2a] transition-all shadow-xs"
           aria-label="Open the CallLedger application"
         >
           Open App
-          <ArrowRight className="w-3 h-3" aria-hidden="true" />
+          <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
     </header>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PAGE ROOT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Root Page Component ────────────────────────────────────────────────────
 
 export default function LandingPage() {
   return (
     <>
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:bg-[#171717] focus:text-[#FFFAF3] focus:px-4 focus:py-2 focus:rounded-sm focus:text-sm focus:font-mono"
-      >
-        Skip to main content
-      </a>
-
       <LandingNav />
-
-      <main id="main-content">
+      <main>
         <HeroSection />
-
         <ProblemSection />
-
         <StructureSection />
-
-        <div className="max-w-7xl mx-auto px-6 md:px-12 lg:px-16">
-          <div className="border-t border-[#E8DFD1]" aria-hidden="true" />
-        </div>
-
         <FollowSection />
-
-        <div className="max-w-7xl mx-auto px-6 md:px-12 lg:px-16">
-          <div className="border-t border-[#E8DFD1]" aria-hidden="true" />
-        </div>
-
         <DecideSection />
       </main>
-
       <ClosingSection />
     </>
   );
