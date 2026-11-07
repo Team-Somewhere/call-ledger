@@ -27,8 +27,11 @@ const CHAIN_WORDS: Record<string, "ethereum" | "base" | "solana" | "arbitrum" | 
   optimism: "optimism", op: "optimism",
 };
 
-const BUY_RE = /\b(buy|buying|long|accumulate|ape(?:\s+in)?|enter|entry|entries|re-?entry)\b/i;
-const SELL_RE = /\b(sell|selling|short|exit|exits|close|closing|take\s+profit)\b/i;
+const DIRECTION_RULES: { re: RegExp; value: Direction }[] = [
+  { re: /\bshort(?:ing)?\b/i, value: "short" },
+  { re: /\bsell(?:ing)?\b/i, value: "sell" },
+  { re: /\b(?:buy(?:ing)?|long|accumulate|ape(?:\s+in)?)\b/i, value: "long" },
+];
 const OPINION_RE = /\b(i think|imo|looks? (bullish|bearish|good|strong)|bullish on|bearish on|could|might|maybe|probably|in my opinion|thinking about)\b/i;
 const HYPOTHETICAL_RE = /\b(if|hypothetically|for example|e\.g\.|example|imagine|what if)\b/i;
 const HISTORICAL_RE = /\b(i (bought|sold|entered|exited)|we (bought|sold)|bought (at|for|in)|sold (at|for)|made \$?\d|up \d+%|pnl|closed (my|the) (trade|position))\b/i;
@@ -36,7 +39,11 @@ const JOKE_RE = /\b(lol|lmao|haha|joke|kidding|meme)\b|\/s\b|😂|🤣/i;
 
 const STOP_RE = /\b(stop ?loss|stop|sl)\b\s*(?:at|@|:|to)?\s*\$?\s*([\d,]*\.?\d+)\s*(k)?/i;
 const TARGET_RE = /\b(take ?profit|target|tp|tgt)\b\s*(?:at|@|:|to)?\s*\$?\s*([\d,]*\.?\d+)\s*(k)?/i;
-const ENTRY_RE = /\b(?:entry|buy|enter|long|at|around|near)\b\s*(?:at|@|around|near|~)?\s*\$\s*([\d,]*\.?\d+)\s*(k)?|\b(?:entry|enter|buy|long)\b[^$\n]{0,20}?\b(?:at|@|around|near|~)\s*\$?\s*([\d,]*\.?\d+)\s*(k)?/i;
+const ENTRY_RANGE_RE =
+  /\bentry(?:\s+zone)?\s*[:=]\s*\$?\s*([\d,]+(?:\.\d+)?)\s*(k)?\s*[–—-]\s*\$?\s*([\d,]+(?:\.\d+)?)\s*(k)?/i;
+const ENTRY_LABELED_RE = /\bentry\s*[:=]\s*\$?\s*([\d,]+(?:\.\d+)?)\s*(k)?/i;
+const ENTRY_ACTION_RE =
+  /\b(?:buy|sell|long|short|enter)\b[^$\n]{0,80}?\b(?:at|@|around|near)\s*\$?\s*([\d,]+(?:\.\d+)?)\s*(k)?/i;
 /** A dollar amount is only a position size when a size word is attached to it (e.g. "$5k worth", "$100 position"). */
 const SIZE_USD_RE = /\$\s*([\d,]*\.?\d+)\s*(k)?\s*(?:worth|position|size|allocation|bag|in\b)/i;
 const SIZE_PCT_RE = /(\d+(?:\.\d+)?)\s*%\s*(?:of\s+(?:my|the)\s+(?:portfolio|bag|stack|balance))?/i;
@@ -65,12 +72,60 @@ function extractAssets(text: string): Field<string>[] {
   return [...found].map((s) => ({ status: "known" as const, value: s, source: s }));
 }
 
+function extractDirection(text: string): Field<Direction> {
+  let best: { index: number; value: Direction; source: string } | null = null;
+  for (const rule of DIRECTION_RULES) {
+    const match = text.match(rule.re);
+    if (!match || match.index == null) continue;
+    if (!best || match.index < best.index) {
+      best = { index: match.index, value: rule.value, source: match[0] };
+    }
+  }
+  return best ? KNOWN(best.value, best.source) : UNKNOWN("No buy, sell, or short action stated");
+}
+
+function extractEntry(text: string): { entryPrice: Field<number>; entryHigh: Field<number> } {
+  const range = text.match(ENTRY_RANGE_RE);
+  if (range) {
+    const first = parseNumber(range[1], range[2]);
+    const second = parseNumber(range[3], range[4]);
+    const low = Math.min(first, second);
+    const high = Math.max(first, second);
+    return {
+      entryPrice: KNOWN(low, range[0]),
+      entryHigh: KNOWN(high, range[0]),
+    };
+  }
+  const labeled = text.match(ENTRY_LABELED_RE);
+  if (labeled) {
+    return {
+      entryPrice: KNOWN(parseNumber(labeled[1], labeled[2]), labeled[0]),
+      entryHigh: UNKNOWN("Single entry price"),
+    };
+  }
+  const action = text.match(ENTRY_ACTION_RE);
+  if (action) {
+    return {
+      entryPrice: KNOWN(parseNumber(action[1], action[2]), action[0]),
+      entryHigh: UNKNOWN("Single entry price"),
+    };
+  }
+  return {
+    entryPrice: UNKNOWN("No entry price stated"),
+    entryHigh: UNKNOWN("No entry range stated"),
+  };
+}
+
 function extractChain(text: string): Field<StrategyDraft["chain"] extends Field<infer V> ? V : never> {
   // 1) Explicit phrasing wins: "on Base", "on Solana", "Base chain", "network: arbitrum".
-  const explicit = text.match(/\b(?:on|chain|network)\s*:?\s*([A-Za-z]+)\b|\b([A-Za-z]+)\s+(?:chain|network)\b/i);
-  if (explicit) {
-    const word = (explicit[1] ?? explicit[2]).toLowerCase();
-    if (CHAIN_WORDS[word]) return KNOWN(CHAIN_WORDS[word], explicit[0]);
+  // Spaces only — a newline must not glue the previous line's ticker to the word "network".
+  for (const match of text.matchAll(/\b(?:on|chain|network)[ \t]*[:=]?[ \t]*([A-Za-z]+)\b/gi)) {
+    const word = match[1].toLowerCase();
+    if (CHAIN_WORDS[word]) return KNOWN(CHAIN_WORDS[word], match[0]);
+  }
+  for (const match of text.matchAll(/\b([A-Za-z]+)[ \t]+(?:chain|network)\b/gi)) {
+    const word = match[1].toLowerCase();
+    if (CHAIN_WORDS[word]) return KNOWN(CHAIN_WORDS[word], match[0]);
   }
   // 2) Otherwise only unambiguous full chain names count ("eth"/"sol" alone are too ambiguous).
   for (const word of ["solana", "arbitrum", "polygon", "optimism", "ethereum", "base", "bsc"]) {
@@ -98,15 +153,11 @@ export function parseStrategy(postText: string): StrategyDraft {
   const warnings: string[] = [];
   const ambiguities: string[] = [];
 
-  const direction: Field<Direction> = BUY_RE.test(text)
-    ? KNOWN("long" as Direction, text.match(BUY_RE)![0])
-    : SELL_RE.test(text)
-      ? KNOWN("short" as Direction, text.match(SELL_RE)![0])
-      : UNKNOWN("No buy or sell action stated");
+  const direction = extractDirection(text);
 
   const stop = text.match(STOP_RE);
   const target = text.match(TARGET_RE);
-  const entry = text.match(ENTRY_RE);
+  const { entryPrice, entryHigh } = extractEntry(text);
   const sizeUsd = text.match(SIZE_USD_RE);
   const sizePct = text.match(SIZE_PCT_RE);
   const lev = text.match(LEVERAGE_RE);
@@ -114,9 +165,6 @@ export function parseStrategy(postText: string): StrategyDraft {
   const dca = text.match(DCA_RE);
   const contract = text.match(CONTRACT_RE);
 
-  const entryPrice: Field<number> = entry
-    ? KNOWN(parseNumber(entry[1] ?? entry[3], entry[2] ?? entry[4]), entry[0])
-    : UNKNOWN("No entry price stated");
   const stopLoss: Field<number> = stop
     ? KNOWN(parseNumber(stop[2], stop[3]), stop[0])
     : UNKNOWN("No stop loss stated");
@@ -186,7 +234,11 @@ export function parseStrategy(postText: string): StrategyDraft {
     contractAddress: contract ? KNOWN(contract[0], contract[0]) : UNKNOWN("No contract address in post"),
     direction,
     entryPrice: blank(entryPrice, "Not a trade instruction"),
-    entryCondition: entry ? KNOWN(entry[0], entry[0]) : UNKNOWN("No entry condition stated"),
+    entryHigh: blank(entryHigh, "Not a trade instruction"),
+    entryCondition:
+      entryPrice.status === "known"
+        ? KNOWN(entryPrice.source, entryPrice.source)
+        : UNKNOWN("No entry condition stated"),
     stopLoss: blank(stopLoss, "Not a trade instruction"),
     takeProfit: blank(takeProfit, "Not a trade instruction"),
     positionSize: blank(positionSize, "Not a trade instruction"),

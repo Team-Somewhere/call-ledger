@@ -7,6 +7,7 @@ import { cleanPostText } from "../utils/sanitization";
 import { sendMessage } from "../services/extension-messaging";
 import {
   buildQuoteRequest,
+  spotLegs,
   type BuiltQuoteRequest,
   type OrderConfig,
 } from "../features/trading/draft-to-quote";
@@ -85,10 +86,22 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
   );
   const isComplete = draft.classification === "trading_instruction";
 
+  const legs = spotLegs(draft);
+  const amountUnit = legs.ok ? legs.legs.amountUnit : "USDC";
   const defaultQty =
-    draft.positionSize.status === "known" && draft.positionSize.value.unit === "usd"
+    draft.positionSize.status === "known" &&
+    draft.positionSize.value.unit === "token" &&
+    legs.ok &&
+    legs.legs.side === "sell"
       ? String(draft.positionSize.value.amount)
-      : "10";
+      : draft.positionSize.status === "known" &&
+          draft.positionSize.value.unit === "usd" &&
+          legs.ok &&
+          legs.legs.side === "buy"
+        ? String(draft.positionSize.value.amount)
+        : legs.ok && legs.legs.side === "sell"
+          ? "0.01"
+          : "10";
 
   const [qtyUsd, setQtyUsd] = useState(defaultQty);
   const [phase, setPhase] = useState<TradePhase>("idle");
@@ -244,8 +257,34 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
       <div className="cl-grid">
         <Value label="Asset" field={draft.assets[0] ?? { status: "unknown", reason: "" }} />
         <Value label="Chain" field={draft.chain} />
-        <Value label="Direction" field={draft.direction} />
-        <Value label="Entry" field={draft.entryPrice} render={(v) => `$${v.toLocaleString("en-US")}`} />
+        <Value
+          label="Side"
+          field={draft.direction}
+          render={(v) => (v === "long" ? "BUY" : v === "sell" ? "SELL" : "SHORT")}
+        />
+        <div className="cl-kv">
+          <span className="cl-kv__label">Source</span>
+          <span className={legs.ok ? "cl-kv__value" : "cl-kv__unknown"}>
+            {legs.ok ? legs.legs.sourceSymbol : "Not stated"}
+          </span>
+        </div>
+        <div className="cl-kv">
+          <span className="cl-kv__label">Destination</span>
+          <span className={legs.ok ? "cl-kv__value" : "cl-kv__unknown"}>
+            {legs.ok ? legs.legs.destinationSymbol : "Not stated"}
+          </span>
+        </div>
+        {draft.entryHigh.status === "known" && draft.entryPrice.status === "known" ? (
+          <div className="cl-kv">
+            <span className="cl-kv__label">Entry</span>
+            <span className="cl-kv__value">
+              ${draft.entryPrice.value.toLocaleString("en-US")}–$
+              {draft.entryHigh.value.toLocaleString("en-US")}
+            </span>
+          </div>
+        ) : (
+          <Value label="Entry" field={draft.entryPrice} render={(v) => `$${v.toLocaleString("en-US")}`} />
+        )}
         <Value label="Stop loss" field={draft.stopLoss} render={(v) => `$${v.toLocaleString("en-US")}`} />
         <Value label="Take profit" field={draft.takeProfit} render={(v) => `$${v.toLocaleString("en-US")}`} />
         <Value
@@ -268,10 +307,12 @@ AnalyzeStrategyButton.Panel = function StrategyAnalysisPanel({
         </ul>
       )}
 
-      {isComplete && (
+      {isComplete && !legs.ok && <div className="cl-follow__error">{legs.message}</div>}
+
+      {isComplete && legs.ok && (
         <div className="cl-trade">
           <label className="cl-trade__label">
-            Amount (USDC)
+            Amount ({amountUnit})
             <input
               className="cl-trade__input"
               type="text"

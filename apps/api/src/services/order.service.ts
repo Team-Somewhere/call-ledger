@@ -65,6 +65,18 @@ export async function requestFlashQuote(
     );
   }
 
+  if (
+    (input.orderType === "limit" || input.orderType === "twap") &&
+    !input.limitNotionalPrice &&
+    !input.limitCrossPrice
+  ) {
+    throw new OrderServiceError(
+      "LIMIT_PRICE_REQUIRED",
+      "A limit order needs limitNotionalPrice or limitCrossPrice. The entry price was not supplied.",
+      400,
+    );
+  }
+
   const client = getDefinitiveClient();
   const feeBps = input.flashIntegratorFeeBps ?? env.DEFINITIVE_INTEGRATOR_FEE_BPS;
 

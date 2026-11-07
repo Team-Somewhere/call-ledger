@@ -85,6 +85,55 @@ describe("strategy parser: price-level sanity", () => {
   });
 });
 
+describe("strategy parser: sell, short, and entry", () => {
+  const sellPost = [
+    "Direction: SELL",
+    "Asset: ETH",
+    "Network: Base",
+    "Entry: $3,000",
+    "Stop Loss: $3,100",
+    "Take Profit: $2,800",
+    "Order Type: Limit",
+  ].join("\n");
+
+  it("extracts a spot sell without turning it into a long", () => {
+    const d = parseStrategy(sellPost);
+    expect(d.direction).toMatchObject({ status: "known", value: "sell" });
+    expect(d.entryPrice).toMatchObject({ status: "known", value: 3000 });
+    expect(d.entryHigh.status).toBe("unknown");
+    expect(d.stopLoss).toMatchObject({ status: "known", value: 3100 });
+    expect(d.takeProfit).toMatchObject({ status: "known", value: 2800 });
+    expect(d.orderType).toMatchObject({ status: "known", value: "limit" });
+    expect(d.assets[0]).toMatchObject({ status: "known", value: "ETH" });
+    expect(d.chain).toMatchObject({ status: "known", value: "base" });
+  });
+
+  it("extracts a buy entry and leaves stops optional", () => {
+    const d = parseStrategy("Buy ETH at $3000");
+    expect(d.direction).toMatchObject({ status: "known", value: "long" });
+    expect(d.entryPrice).toMatchObject({ status: "known", value: 3000 });
+    expect(d.stopLoss.status).toBe("unknown");
+    expect(d.takeProfit.status).toBe("unknown");
+  });
+
+  it("keeps a short distinct from a spot sell", () => {
+    const d = parseStrategy("SHORT ETH at $3000");
+    expect(d.direction).toMatchObject({ status: "known", value: "short" });
+    expect(d.entryPrice).toMatchObject({ status: "known", value: 3000 });
+  });
+
+  it("keeps both boundaries of an entry zone", () => {
+    const d = parseStrategy("Buy ETH. Entry zone: $2,950–$3,000");
+    expect(d.entryPrice).toMatchObject({ status: "known", value: 2950 });
+    expect(d.entryHigh).toMatchObject({ status: "known", value: 3000 });
+  });
+
+  it("reads sell-around and enter-at prices", () => {
+    expect(parseStrategy("Sell ETH around $3000").entryPrice).toMatchObject({ status: "known", value: 3000 });
+    expect(parseStrategy("Enter at 3000. Buy ETH.").entryPrice).toMatchObject({ status: "known", value: 3000 });
+  });
+});
+
 describe("strategy schema", () => {
   it("accepts a parser result", () => {
     const d = parseStrategy("Buy ETH on Base around $3,000. Stop loss $2,850. Target $3,400.");

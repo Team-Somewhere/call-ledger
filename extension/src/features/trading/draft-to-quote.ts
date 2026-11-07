@@ -25,6 +25,16 @@ export interface BuiltQuoteRequest {
   maxSlippage?: string;
 }
 
+export interface SpotLegs {
+  side: "buy" | "sell";
+  /** Asset being traded. Flash calls this the target asset. */
+  assetSymbol: string;
+  /** Spent on a buy, received on a sell. */
+  sourceSymbol: string;
+  destinationSymbol: string;
+  amountUnit: string;
+}
+
 function pickAsset(
   config: OrderConfig,
   chain: string,
@@ -42,6 +52,37 @@ function pickAsset(
   return chainAssets[upper] ?? chainAssets[aliases[upper] ?? ""] ?? null;
 }
 
+const STABLES = new Set(["USDC", "USDT", "DAI"]);
+
+/** Spot legs from an already-parsed draft. Does not re-read the post. */
+export function spotLegs(draft: StrategyDraft): { ok: true; legs: SpotLegs } | { ok: false; message: string } {
+  if (draft.direction.status !== "known") {
+    return { ok: false, message: "The post does not state whether to buy, sell, or short." };
+  }
+  if (draft.direction.value === "short") {
+    return {
+      ok: false,
+      message:
+        "This post opens a SHORT. A Base spot quote can buy or sell ETH, but it cannot open a leveraged short.",
+    };
+  }
+  const asset = draft.assets.find(
+    (item) => item.status === "known" && !STABLES.has(item.value.toUpperCase()),
+  );
+  const assetSymbol = asset?.status === "known" ? asset.value.toUpperCase() : "ETH";
+  const side = draft.direction.value === "sell" ? "sell" : "buy";
+  return {
+    ok: true,
+    legs: {
+      side,
+      assetSymbol,
+      sourceSymbol: side === "sell" ? assetSymbol : "USDC",
+      destinationSymbol: side === "sell" ? "USDC" : assetSymbol,
+      amountUnit: side === "sell" ? assetSymbol : "USDC",
+    },
+  };
+}
+
 /** Convert a parsed strategy draft + amount into a Flash quote payload. */
 export function buildQuoteRequest(params: {
   draft: StrategyDraft;
@@ -55,12 +96,13 @@ export function buildQuoteRequest(params: {
     return { ok: false, message: "Trading is not configured on this CallLedger deployment." };
   }
 
+  const legsResult = spotLegs(draft);
+  if (!legsResult.ok) return legsResult;
+  const { side, assetSymbol, amountUnit } = legsResult.legs;
+
   const chain =
     draft.chain.status === "known" ? draft.chain.value.toLowerCase() : "base";
-  const symbol =
-    draft.assets[0]?.status === "known" ? draft.assets[0].value.toUpperCase() : "WETH";
-
-  const target = pickAsset(config, chain, symbol) ?? pickAsset(config, "base", symbol);
+  const target = pickAsset(config, chain, assetSymbol) ?? pickAsset(config, "base", assetSymbol);
   const usdc =
     pickAsset(config, target?.chain ?? chain, "USDC") ??
     pickAsset(config, "base", "USDC");
@@ -68,30 +110,13 @@ export function buildQuoteRequest(params: {
   if (!target || !usdc) {
     return {
       ok: false,
-      message: `Asset ${symbol} on ${chain} is not in CallLedger verified assets.`,
+      message: `Asset ${assetSymbol} on ${chain} is not in CallLedger verified assets.`,
     };
   }
 
-  const direction =
-    draft.direction.status === "known" ? draft.direction.value : "long";
-  const side: "buy" | "sell" = direction === "short" ? "sell" : "buy";
-
-  // For buy: spend USDC qty. For sell: approximate token qty from USD/entry when known.
-  let qty = qtyUsd;
-  if (side === "sell") {
-    if (draft.entryPrice.status === "known" && draft.entryPrice.value > 0) {
-      const tokens = Number(qtyUsd) / draft.entryPrice.value;
-      qty = tokens.toFixed(Math.min(6, target.decimals));
-    } else {
-      return {
-        ok: false,
-        message: "Sell/short needs an entry price in the post to size the order.",
-      };
-    }
-  }
-
+  const qty = qtyUsd.trim();
   if (!/^(0|[1-9]\d*)(\.\d{1,18})?$/.test(qty) || Number(qty) <= 0) {
-    return { ok: false, message: "Enter a valid positive amount." };
+    return { ok: false, message: `Enter a valid positive ${amountUnit} amount.` };
   }
 
   if (side === "buy" && Number(qty) < 0.05) {
@@ -104,10 +129,26 @@ export function buildQuoteRequest(params: {
 
   const explicitMarket =
     draft.orderType.status === "known" && draft.orderType.value === "market";
-  const hasEntry = draft.entryPrice.status === "known" && draft.entryPrice.value > 0;
-  const limitWithoutEntry =
-    draft.orderType.status === "known" && draft.orderType.value === "limit" && !hasEntry;
-  const orderType = explicitMarket || !hasEntry ? "market" : "limit";
+  const explicitLimit =
+    draft.orderType.status === "known" && draft.orderType.value === "limit";
+  const entryLow = draft.entryPrice.status === "known" ? draft.entryPrice.value : null;
+  const entryHigh = draft.entryHigh.status === "known" ? draft.entryHigh.value : null;
+  const ranged = entryLow != null && entryHigh != null && entryHigh !== entryLow;
+  const singleEntry = entryLow != null && !ranged;
+
+  if (ranged && !explicitMarket && entryLow != null && entryHigh != null) {
+    return {
+      ok: false,
+      message: `Entry is a range ($${entryLow.toLocaleString("en-US")}–$${entryHigh.toLocaleString("en-US")}). A limit quote needs one of those prices.`,
+    };
+  }
+  const orderType = explicitMarket ? "market" : explicitLimit || singleEntry ? "limit" : "market";
+  if (orderType === "limit" && !singleEntry) {
+    return {
+      ok: false,
+      message: "A limit order needs an entry price. This post does not state one.",
+    };
+  }
 
   const request: BuiltQuoteRequest = {
     targetChain: target.chain,
@@ -118,18 +159,11 @@ export function buildQuoteRequest(params: {
     qty,
     orderType,
     funderAddress: funderAddress.toLowerCase(),
-    maxSlippage: "0.005",
   };
-
+  if (orderType === "market") request.maxSlippage = "0.005";
   if (orderType === "limit" && draft.entryPrice.status === "known") {
     request.limitNotionalPrice = String(draft.entryPrice.value);
   }
 
-  return {
-    ok: true,
-    request,
-    note: limitWithoutEntry
-      ? "No entry price in the post, so this quote is a market order instead of a limit order."
-      : undefined,
-  };
+  return { ok: true, request };
 }

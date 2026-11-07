@@ -120,6 +120,29 @@ describe("Order Service & Controller Unit Tests", () => {
     );
   });
 
+  it("rejects a limit quote that has no limit price before calling Flash", async () => {
+    await assert.rejects(
+      async () => {
+        await requestFlashQuote(testAddress, {
+          targetChain: "base",
+          contraChain: "base",
+          targetAsset: "0x4200000000000000000000000000000000000006",
+          contraAsset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          side: "sell",
+          qty: "0.05",
+          orderType: "limit",
+          funderAddress: testAddress,
+        });
+      },
+      (err: unknown) => {
+        assert.ok(err instanceof OrderServiceError);
+        assert.equal(err.code, "LIMIT_PRICE_REQUIRED");
+        assert.equal(err.statusCode, 400);
+        return true;
+      },
+    );
+  });
+
   it("requestFlashQuote succeeds when funder matches authenticated wallet", async () => {
     const quote = await requestFlashQuote(testAddress, {
       targetChain: "base",

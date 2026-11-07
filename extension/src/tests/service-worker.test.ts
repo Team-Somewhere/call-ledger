@@ -23,6 +23,8 @@ vi.mock("../services/storage", () => ({
     mockStorage.preferences = { currency: next.currency };
     return mockStorage.preferences;
   }),
+  getWalletSession: vi.fn(async () => null),
+  setWalletSession: vi.fn(async () => undefined),
 }));
 
 describe("Service Worker Message Handler", () => {
@@ -87,10 +89,7 @@ describe("Service Worker Message Handler", () => {
     const res = await handle({ type: "GET_SESSION" });
     expect(res).toEqual({
       ok: true,
-      data: {
-        connected: false,
-        reason: "CallLedger sign-in is not yet enabled for the extension.",
-      },
+      data: { connected: false },
     });
   });
 });

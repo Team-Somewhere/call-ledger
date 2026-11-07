@@ -7,7 +7,7 @@ export type Field<T> =
   | { status: "known"; value: T; source: string }
   | { status: "unknown"; reason: string };
 
-export type Direction = "long" | "short" | "unspecified";
+export type Direction = "long" | "sell" | "short" | "unspecified";
 export type OrderType = "market" | "limit" | "unspecified";
 export type Classification =
   | "trading_instruction"
@@ -28,6 +28,8 @@ export interface StrategyDraft {
   contractAddress: Field<string>;
   direction: Field<Direction>;
   entryPrice: Field<number>;
+  /** Upper bound when the post states an entry range. Unknown for a single price. */
+  entryHigh: Field<number>;
   entryCondition: Field<string>;
   stopLoss: Field<number>;
   takeProfit: Field<number>;

@@ -23,18 +23,21 @@ export function extractActionableSignal(text: string): ActionableSignalDraft | n
   const asset = ASSETS.find((symbol) => new RegExp(`\\b${symbol}\\b`, "i").test(text));
   if (!asset) return null;
 
-  const long = /\b(long|buy)\b/i.test(text);
-  const short = /\b(short|sell)\b/i.test(text);
-  if (long === short) return null;
+  const isShort = /\bshort(?:ing)?\b/i.test(text);
+  const isSell = /\bsell(?:ing)?\b/i.test(text);
+  const isLong = /\b(?:long|buy(?:ing)?)\b/i.test(text);
+  if (isShort && !isSell && !isLong) return null;
+  if (isLong === isSell) return null;
 
   const entry =
-    numberAfter(text, /\b(?:at|entry|@)\s*\$?\s*([\d,]+(?:\.\d+)?)/i) ??
+    numberAfter(text, /\bentry\s*[:=]?\s*\$?\s*([\d,]+(?:\.\d+)?)/i) ??
+    numberAfter(text, /\b(?:at|@|around|near)\s*\$?\s*([\d,]+(?:\.\d+)?)/i) ??
     numberAfter(text, /\b(?:long|short|buy|sell)\s+[A-Z]{2,6}\s*\$?\s*([\d,]+(?:\.\d+)?)/i);
   if (!entry) return null;
 
   return {
     asset: asset === "WETH" ? "ETH" : asset === "WBTC" ? "BTC" : asset,
-    side: long ? "buy" : "sell",
+    side: isLong ? "buy" : "sell",
     entry,
     stopLoss: numberAfter(text, /\b(?:stop\s*loss|stoploss|sl)\s*:?\s*\$?\s*([\d,]+(?:\.\d+)?)/i),
     takeProfit: numberAfter(text, /\b(?:take\s*profit|tp)\s*:?\s*\$?\s*([\d,]+(?:\.\d+)?)/i),
